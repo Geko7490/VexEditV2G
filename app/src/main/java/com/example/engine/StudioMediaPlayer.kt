@@ -8,6 +8,7 @@ import android.media.MediaPlayer
 import android.util.Log
 import android.view.Surface
 import android.net.Uri
+import android.os.Build
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -19,7 +20,7 @@ import java.io.File
 
 enum class PlaybackStatus { IDLE, LOADING, READY, PLAYING, PAUSED, ERROR }
 
-data class PlayerState(
+data class AudioTrackPlayback(\n    val id: String,\n    val filePath: String,\n    val startOffsetMs: Long,\n    val volume: Float,\n    val muted: Boolean,\n    val speed: Float = 1f,\n    val shouldPlay: Boolean\n)\n\ndata class PlayerState(
     val status: PlaybackStatus = PlaybackStatus.IDLE,
     val filePath: String = "",
     val errorMessage: String? = null,
@@ -159,13 +160,13 @@ class StudioMediaPlayer(context: Context) {
     fun play() {
         desiredPlaying = true
         if (isPrepared) videoPlayer.play()
-        if (isAudioPrepared) try { audioPlayer?.start() } catch (_: Exception) {}
+        audioPlayers.values.forEach { mp -> try { if (!mp.isPlaying) mp.start() } catch (_: Exception) {} }
     }
 
     fun pause() {
         desiredPlaying = false
         videoPlayer.pause()
-        if (isAudioPrepared) try { audioPlayer?.pause() } catch (_: Exception) {}
+        audioPlayers.values.forEach { mp -> try { if (mp.isPlaying) mp.pause() } catch (_: Exception) {} }
     }
 
     fun seekVideo(offsetMs: Long) {
@@ -224,61 +225,81 @@ class StudioMediaPlayer(context: Context) {
         shouldPlay: Boolean,
         volume: Float = 1f,
         muted: Boolean = false
-    ) {
-        if (audioPath.isEmpty() || !File(audioPath).exists()) {
-            stopAudio()
-            return
-        }
-        val effectiveVolume = if (muted) 0f else volume.coerceIn(0f, 1f)
-        if (currentAudioPath == audioPath && audioPlayer != null) {
-            try {
-                audioPlayer?.setVolume(effectiveVolume, effectiveVolume)
-                if (shouldPlay && isAudioPrepared && audioPlayer?.isPlaying != true) audioPlayer?.start()
-                else if (!shouldPlay && isAudioPrepared) {
-                    audioPlayer?.pause()
-                    audioPlayer?.seekTo(startOffsetMs.coerceAtLeast(0L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
-                }
-            } catch (_: Exception) {}
-            return
+    ) = bindAudioTracks(
+        listOf(AudioTrackPlayback("legacy", audioPath, startOffsetMs, volume, muted, shouldPlay = shouldPlay))
+    )
+
+    /** Synchronizes every audio clip active at the current timeline position. */
+    fun bindAudioTracks(tracks: List<AudioTrackPlayback>) {
+        val validTracks = tracks.filter { it.filePath.isNotBlank() && File(it.filePath).isFile }
+        val activeIds = validTracks.map { it.id }.toSet()
+        (audioPlayers.keys - activeIds).forEach { id ->
+            try { audioPlayers.remove(id)?.release() } catch (_: Exception) {}
+            audioPaths.remove(id)
         }
 
-        currentAudioPath = audioPath
-        try { audioPlayer?.release() } catch (_: Exception) {}
-        isAudioPrepared = false
-        try {
-            audioPlayer = MediaPlayer().apply {
-                setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                        .setUsage(AudioAttributes.USAGE_MEDIA)
-                        .build()
-                )
-                setDataSource(audioPath)
-                setOnPreparedListener { mp ->
-                    isAudioPrepared = true
-                    try {
-                        mp.setVolume(effectiveVolume, effectiveVolume)
-                        mp.seekTo(startOffsetMs.coerceAtLeast(0L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
-                        if (shouldPlay && desiredPlaying) mp.start()
-                    } catch (_: Exception) {}
+        validTracks.forEach { track ->
+            val targetVolume = if (track.muted) 0f else track.volume.coerceIn(0f, 1f)
+            val existing = audioPlayers[track.id]
+            if (existing != null && audioPaths[track.id] == track.filePath) {
+                try {
+                    existing.setVolume(targetVolume, targetVolume)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        existing.playbackParams = existing.playbackParams.setSpeed(track.speed.coerceIn(0.25f, 4f))
+                    }
+                    val drift = kotlin.math.abs(existing.currentPosition.toLong() - track.startOffsetMs)
+                    if (!track.shouldPlay && drift > 180L) existing.seekTo(track.startOffsetMs.coerceAtLeast(0L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
+                    if (track.shouldPlay && !existing.isPlaying) existing.start()
+                    if (!track.shouldPlay && existing.isPlaying) existing.pause()
+                } catch (e: Exception) {
+                    Log.w(TAG, "Audio sync failed for ${track.id}", e)
                 }
-                setOnErrorListener { _, what, extra ->
-                    Log.e(TAG, "Audio playback error: $what/$extra")
-                    isAudioPrepared = false
-                    true
+            } else {
+                try { existing?.release() } catch (_: Exception) {}
+                audioPaths[track.id] = track.filePath
+                val player = MediaPlayer()
+                audioPlayers[track.id] = player
+                try {
+                    player.setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                            .setUsage(AudioAttributes.USAGE_MEDIA)
+                            .build()
+                    )
+                    player.setDataSource(track.filePath)
+                    player.setOnPreparedListener { mp ->
+                        try {
+                            mp.setVolume(targetVolume, targetVolume)
+                            mp.seekTo(track.startOffsetMs.coerceAtLeast(0L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                                mp.playbackParams = mp.playbackParams.setSpeed(track.speed.coerceIn(0.25f, 4f))
+                            }
+                            if (track.shouldPlay && desiredPlaying) mp.start()
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Audio track preparation failed for ${track.id}", e)
+                        }
+                    }
+                    player.setOnErrorListener { _, what, extra ->
+                        Log.e(TAG, "Audio track ${track.id} error: $what/$extra")
+                        audioPlayers.remove(track.id)
+                        audioPaths.remove(track.id)
+                        true
+                    }
+                    player.prepareAsync()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Audio track initialization failed for ${track.id}", e)
+                    audioPlayers.remove(track.id)
+                    audioPaths.remove(track.id)
+                    try { player.release() } catch (_: Exception) {}
                 }
-                prepareAsync()
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "AudioPlayer init failed", e)
-            isAudioPrepared = false
         }
     }
 
     fun stopAudio() {
-        currentAudioPath = null
-        isAudioPrepared = false
-        try { audioPlayer?.stop(); audioPlayer?.reset() } catch (_: Exception) {}
+        audioPlayers.values.forEach { player -> try { player.release() } catch (_: Exception) {} }
+        audioPlayers.clear()
+        audioPaths.clear()
     }
 
     fun release() {
