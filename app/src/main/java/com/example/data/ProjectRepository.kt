@@ -209,6 +209,21 @@ class ProjectRepository(private val context: Context) {
         obj.put("thumbnailUri", project.thumbnailUri ?: "")
         obj.put("thumbnailPath", project.thumbnailPath ?: "")
 
+        val tracksArray = JSONArray()
+        project.tracks.forEach { track ->
+            tracksArray.put(JSONObject().apply {
+                put("id", track.id)
+                put("title", track.title)
+                put("subtitle", track.subtitle)
+                put("type", track.type.name)
+                put("isMuted", track.isMuted)
+                put("isVisible", track.isVisible)
+                put("isSolo", track.isSolo)
+                put("faderDb", track.faderDb.toDouble())
+            })
+        }
+        obj.put("tracks", tracksArray)
+
         val clipsArray = JSONArray()
         project.clips.forEach { clip ->
             val c = JSONObject()
@@ -266,6 +281,12 @@ class ProjectRepository(private val context: Context) {
             ap.put("fadeInMs", clip.audioProperties.fadeInMs)
             ap.put("fadeOutMs", clip.audioProperties.fadeOutMs)
             ap.put("faderDb", clip.audioProperties.faderDb.toDouble())
+            ap.put("eqPreset", clip.audioProperties.eqPreset)
+            ap.put("noiseGateEnabled", clip.audioProperties.noiseGateEnabled)
+            ap.put("compressorEnabled", clip.audioProperties.compressorEnabled)
+            ap.put("reverbLevel", clip.audioProperties.reverbLevel.toDouble())
+            ap.put("delayLevel", clip.audioProperties.delayLevel.toDouble())
+            ap.put("limiterEnabled", clip.audioProperties.limiterEnabled)
             c.put("audioProperties", ap)
 
             // Waveform points
@@ -299,6 +320,28 @@ class ProjectRepository(private val context: Context) {
         val isFavorite = obj.optBoolean("isFavorite", false)
         val thumbUri = obj.optString("thumbnailUri").takeIf { it.isNotEmpty() }
         val thumbPath = obj.optString("thumbnailPath").takeIf { it.isNotEmpty() }
+
+        val tracks = mutableListOf<Track>()
+        val tracksArray = obj.optJSONArray("tracks")
+        if (tracksArray != null) {
+            for (index in 0 until tracksArray.length()) {
+                val item = tracksArray.optJSONObject(index) ?: continue
+                val type = try { TrackType.valueOf(item.optString("type")) } catch (_: Exception) { continue }
+                tracks.add(
+                    Track(
+                        id = item.optString("id", "track_${index}"),
+                        title = item.optString("title", "Track"),
+                        subtitle = item.optString("subtitle", ""),
+                        type = type,
+                        isMuted = item.optBoolean("isMuted", false),
+                        isVisible = item.optBoolean("isVisible", true),
+                        isSolo = item.optBoolean("isSolo", false),
+                        faderDb = item.optDouble("faderDb", 0.0).toFloat()
+                    )
+                )
+            }
+        }
+        val projectTracks = tracks.ifEmpty { Project.defaultTracks() }
 
         val clips = mutableListOf<MediaClip>()
         val clipsArray = obj.optJSONArray("clips") ?: JSONArray()
@@ -362,7 +405,13 @@ class ProjectRepository(private val context: Context) {
                     isSolo = apObj.optBoolean("isSolo", false),
                     fadeInMs = apObj.optLong("fadeInMs", 0L),
                     fadeOutMs = apObj.optLong("fadeOutMs", 0L),
-                    faderDb = apObj.optDouble("faderDb", 0.0).toFloat()
+                    faderDb = apObj.optDouble("faderDb", 0.0).toFloat(),
+                    eqPreset = apObj.optString("eqPreset", "Flat"),
+                    noiseGateEnabled = apObj.optBoolean("noiseGateEnabled", false),
+                    compressorEnabled = apObj.optBoolean("compressorEnabled", false),
+                    reverbLevel = apObj.optDouble("reverbLevel", 0.0).toFloat(),
+                    delayLevel = apObj.optDouble("delayLevel", 0.0).toFloat(),
+                    limiterEnabled = apObj.optBoolean("limiterEnabled", false)
                 )
             } else AudioProperties()
 
@@ -409,6 +458,7 @@ class ProjectRepository(private val context: Context) {
             isFavorite = isFavorite,
             thumbnailUri = thumbUri,
             thumbnailPath = thumbPath,
+            tracks = projectTracks,
             clips = clips
         )
     }
