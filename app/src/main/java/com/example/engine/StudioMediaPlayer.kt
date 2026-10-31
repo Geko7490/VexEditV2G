@@ -303,6 +303,7 @@ class StudioMediaPlayer(context: Context) {
                     }
                     player.setOnErrorListener { _, what, extra ->
                         Log.e(TAG, "Audio track ${track.id} error: $what/$extra")
+                        releasePreviewEffects(track.id)
                         audioPlayers.remove(track.id)
                         audioPaths.remove(track.id)
                         true
