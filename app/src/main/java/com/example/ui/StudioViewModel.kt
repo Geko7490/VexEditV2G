@@ -494,13 +494,17 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     fun moveClip(clipId: String, newStartTimeMs: Long) {
         val project = _currentProject.value ?: return
         val clip = project.clips.find { it.id == clipId } ?: return
+        val safeStart = newStartTimeMs.coerceAtLeast(0L)
+        if (clip.startTimeMs == safeStart) return
         pushUndoState(project)
-        val updated = clip.copy(startTimeMs = newStartTimeMs.coerceAtLeast(0L))
+        val updated = clip.copy(startTimeMs = safeStart)
         val updatedClips = project.clips.map { if (it.id == clipId) updated else it }
         val maxEnd = updatedClips.maxOfOrNull { it.startTimeMs + it.durationMs } ?: 0L
         val updatedProject = project.copy(clips = updatedClips, durationMs = maxEnd)
         _currentProject.value = updatedProject
+        _selectedClipId.value = clipId
         projectRepo.saveProject(updatedProject)
+        syncPlayerToPlayhead(_playheadPositionMs.value)
     }
 
     fun duplicateClip(clipId: String) {
