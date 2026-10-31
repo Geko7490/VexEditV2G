@@ -161,6 +161,7 @@ class StudioMediaPlayer(context: Context) {
             videoPlayer.prepare()
             if (shouldPlay) videoPlayer.play() else videoPlayer.pause()
         } else {
+            if (!isPrepared && !shouldPlay) pendingSeekMs = startOffsetMs.coerceAtLeast(0L)
             if (isPrepared && !shouldPlay) videoPlayer.seekTo(startOffsetMs.coerceAtLeast(0L))
             if (shouldPlay) videoPlayer.play() else videoPlayer.pause()
         }
