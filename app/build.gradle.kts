@@ -32,12 +32,6 @@ android {
       keyAlias = "upload"
       keyPassword = System.getenv("KEY_PASSWORD")
     }
-    create("debugConfig") {
-      storeFile = file("${rootDir}/debug.keystore")
-      storePassword = "android"
-      keyAlias = "androiddebugkey"
-      keyPassword = "android"
-    }
   }
 
   buildTypes {
@@ -48,11 +42,6 @@ android {
       // Do not remove or modify this signingConfig assignment. It is necessary for Android apps in
       // AI Studio.
       signingConfig = signingConfigs.getByName("release")
-    }
-    debug {
-      // Do not remove or modify this signingConfig assignment. It is necessary for Android apps in
-      // AI Studio.
-      signingConfig = signingConfigs.getByName("debugConfig")
     }
   }
   compileOptions {
