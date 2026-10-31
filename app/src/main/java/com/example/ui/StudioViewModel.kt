@@ -161,9 +161,6 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         val activeVideoClip = project.clips.filter {
             it.trackType == TrackType.VIDEO && it.mediaType == MediaType.VIDEO
         }.find { posMs >= it.startTimeMs && posMs < (it.startTimeMs + it.durationMs) }
-            ?: (if (project.clips.any { it.trackType == TrackType.VIDEO && it.mediaType == MediaType.VIDEO } && posMs <= 0L)
-                project.clips.firstOrNull { it.trackType == TrackType.VIDEO && it.mediaType == MediaType.VIDEO }
-            else null)
 
         if (activeVideoClip != null && activeVideoClip.filePath.isNotEmpty()) {
             val offsetMs = ((posMs - activeVideoClip.startTimeMs) * activeVideoClip.speed).toLong().plus(activeVideoClip.sourceStartMs).coerceAtLeast(0L)
@@ -253,8 +250,15 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                         .find { currentPos >= it.startTimeMs && currentPos < (it.startTimeMs + it.durationMs) }
                     val newClip = proj.clips.filter { it.trackType == TrackType.VIDEO && it.mediaType == MediaType.VIDEO }
                         .find { newPos >= it.startTimeMs && newPos < (it.startTimeMs + it.durationMs) }
+                    val audioTypes = setOf(TrackType.AUDIO_MUSIC, TrackType.AUDIO_VOICE, TrackType.AUDIO_SFX)
+                    val oldAudioIds = proj.clips.filter {
+                        it.trackType in audioTypes && currentPos >= it.startTimeMs && currentPos < it.startTimeMs + it.durationMs
+                    }.map { it.id }.sorted()
+                    val newAudioIds = proj.clips.filter {
+                        it.trackType in audioTypes && newPos >= it.startTimeMs && newPos < it.startTimeMs + it.durationMs
+                    }.map { it.id }.sorted()
 
-                    if (oldClip?.id != newClip?.id) {
+                    if (oldClip?.id != newClip?.id || oldAudioIds != newAudioIds) {
                         syncPlayerToPlayhead(newPos)
                     }
                 }
@@ -582,6 +586,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         val updatedProject = project.copy(clips = updatedClips)
         _currentProject.value = updatedProject
         projectRepo.saveProject(updatedProject)
+        syncPlayerToPlayhead(_playheadPositionMs.value)
     }
 
     fun updateClipTransform(clipId: String, transform: ClipTransform) {
@@ -726,6 +731,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         val updatedProject = project.copy(clips = updatedClips)
         _currentProject.value = updatedProject
         projectRepo.saveProject(updatedProject)
+        syncPlayerToPlayhead(_playheadPositionMs.value)
     }
 
     fun setTrackFader(trackId: String, db: Float) {
@@ -736,6 +742,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         val updatedProject = project.copy(tracks = updatedTracks)
         _currentProject.value = updatedProject
         projectRepo.saveProject(updatedProject)
+        syncPlayerToPlayhead(_playheadPositionMs.value)
     }
 
     fun toggleTrackMute(trackId: String) {
@@ -746,6 +753,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         val updatedProject = project.copy(tracks = updatedTracks)
         _currentProject.value = updatedProject
         projectRepo.saveProject(updatedProject)
+        syncPlayerToPlayhead(_playheadPositionMs.value)
     }
 
     fun toggleTrackSolo(trackId: String) {
@@ -756,6 +764,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         val updatedProject = project.copy(tracks = updatedTracks)
         _currentProject.value = updatedProject
         projectRepo.saveProject(updatedProject)
+        syncPlayerToPlayhead(_playheadPositionMs.value)
     }
 
     // --- Media Import ---
