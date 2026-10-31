@@ -157,8 +157,9 @@ data class Project(
     companion object {
         fun defaultTracks(): List<Track> = listOf(
             Track("track_video_1", "Video 1", "Video", TrackType.VIDEO),
-            Track("track_audio_1", "Audio 1", "Audio", TrackType.AUDIO_MUSIC, faderDb = 0.0f),
-            Track("track_audio_2", "Audio 2", "Audio", TrackType.AUDIO_SFX, faderDb = 0.0f),
+            Track("track_audio_1", "Music", "Audio", TrackType.AUDIO_MUSIC, faderDb = 0.0f),
+            Track("track_audio_voice", "Voice", "Audio", TrackType.AUDIO_VOICE, faderDb = 0.0f),
+            Track("track_audio_2", "Sound FX", "Audio", TrackType.AUDIO_SFX, faderDb = 0.0f),
             Track("track_vfx_1", "VFX", "Effects", TrackType.VFX),
             Track("track_text_1", "Text", "Overlays", TrackType.TEXT)
         )
