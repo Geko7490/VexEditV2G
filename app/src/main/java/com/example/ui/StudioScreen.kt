@@ -1356,12 +1356,23 @@ fun StudioScreen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceAround
                         ) {
-                            listOf("Original", "16:9", "9:16", "1:1").forEach { ratioStr ->
+                            listOf(
+                                "Original" to (project?.aspectRatio ?: AspectRatio.RATIO_9_16),
+                                "16:9" to AspectRatio.RATIO_16_9,
+                                "9:16" to AspectRatio.RATIO_9_16,
+                                "1:1" to AspectRatio.RATIO_1_1
+                            ).forEach { (ratioLabel, ratio) ->
+                                val selected = project?.aspectRatio == ratio
                                 OutlinedButton(
-                                    onClick = { activeTool = null },
-                                    colors = ButtonDefaults.outlinedButtonColors(containerColor = VexPanel)
+                                    onClick = {
+                                        viewModel.setProjectAspectRatio(ratio)
+                                        activeTool = null
+                                    },
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        containerColor = if (selected) VexAccent.copy(alpha = 0.2f) else VexPanel
+                                    )
                                 ) {
-                                    Text(ratioStr, color = VexTextPrimary, fontSize = 11.sp)
+                                    Text(ratioLabel, color = if (selected) VexAccentLight else VexTextPrimary, fontSize = 11.sp)
                                 }
                             }
                         }
