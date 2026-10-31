@@ -202,11 +202,19 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             val muted = clip.audioProperties.isMuted || track?.isMuted == true || (anySolo && !isSoloed)
             val trackGain = Math.pow(10.0, ((track?.faderDb ?: 0f) / 20f).toDouble()).toFloat()
             val offset = ((posMs - clip.startTimeMs) * clip.speed).toLong() + clip.sourceStartMs
+            val clipTimeMs = (posMs - clip.startTimeMs).coerceAtLeast(0L)
+            val fadeInGain = if (clip.audioProperties.fadeInMs > 0L) {
+                (clipTimeMs.toFloat() / clip.audioProperties.fadeInMs).coerceIn(0f, 1f)
+            } else 1f
+            val remainingMs = (clip.durationMs - clipTimeMs).coerceAtLeast(0L)
+            val fadeOutGain = if (clip.audioProperties.fadeOutMs > 0L) {
+                (remainingMs.toFloat() / clip.audioProperties.fadeOutMs).coerceIn(0f, 1f)
+            } else 1f
             AudioTrackPlayback(
                 id = clip.id,
                 filePath = clip.filePath,
                 startOffsetMs = offset.coerceAtLeast(0L),
-                volume = (clip.volume * trackGain).coerceIn(0f, 1f),
+                volume = (clip.volume * trackGain * fadeInGain * fadeOutGain).coerceIn(0f, 1f),
                 muted = muted,
                 speed = clip.speed,
                 shouldPlay = _isPlaying.value
