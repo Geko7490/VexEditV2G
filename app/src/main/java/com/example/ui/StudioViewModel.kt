@@ -792,6 +792,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     fun updateAudioProperties(clipId: String, props: AudioProperties) {
         val project = _currentProject.value ?: return
         val clip = project.clips.find { it.id == clipId } ?: return
+        pushUndoState(project)
         val updated = clip.copy(audioProperties = props, volume = props.volume)
         val updatedClips = project.clips.map { if (it.id == clipId) updated else it }
         val updatedProject = project.copy(clips = updatedClips)
