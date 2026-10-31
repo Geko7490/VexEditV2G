@@ -1341,7 +1341,7 @@ fun StudioScreen(
                             Slider(
                                 value = selectedClip.volume,
                                 onValueChange = { viewModel.setClipVolume(selectedClip.id, it) },
-                                valueRange = 0f..2f,
+                                valueRange = 0f..1f,
                                 modifier = Modifier.weight(1f),
                                 colors = SliderDefaults.colors(
                                     thumbColor = VexAccent,
