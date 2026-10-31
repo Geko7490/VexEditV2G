@@ -128,7 +128,7 @@ fun AudioStudioScreen(
                 } else if (activeToolDialog == "reverb") {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text("Reverb: ${(editReverbLevel * 100).toInt()}%", color = VexTextPrimary)
-                        Slider(value = editReverbLevel, onValueChange = { editReverbLevel = it }, valueRange = 0f..1f)
+                        Slider(value = editReverbLevel, onValueChange = { editReverbLevel = it }, valueRange = 0f..1f, steps = 2)
                         Text("Reverb is applied during timeline preview. Export processing is still pending.", color = VexTextSecondary, fontSize = 11.sp)
                     }
                 } else {
