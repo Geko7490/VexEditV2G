@@ -56,6 +56,8 @@ fun AudioStudioScreen(
     var editVolume by remember(selectedAudioClip) { mutableFloatStateOf(selectedAudioClip?.volume ?: 1f) }
     var editFadeInMs by remember(selectedAudioClip) { mutableFloatStateOf(selectedAudioClip?.audioProperties?.fadeInMs?.toFloat() ?: 0f) }
     var editFadeOutMs by remember(selectedAudioClip) { mutableFloatStateOf(selectedAudioClip?.audioProperties?.fadeOutMs?.toFloat() ?: 0f) }
+    var editEqPreset by remember(selectedAudioClip) { mutableStateOf(selectedAudioClip?.audioProperties?.eqPreset ?: "Flat") }
+    var editReverbLevel by remember(selectedAudioClip) { mutableFloatStateOf(selectedAudioClip?.audioProperties?.reverbLevel ?: 0f) }
 
     val audioTracks = remember(project) {
         project?.tracks?.filter {
@@ -65,7 +67,7 @@ fun AudioStudioScreen(
     var activeToolDialog by remember { mutableStateOf<String?>(null) } // "fade", "eq", "reverb"
 
     if (activeToolDialog != null) {
-        val supportedEdit = activeToolDialog == "volume" || activeToolDialog == "fade"
+        val supportedEdit = activeToolDialog in setOf("volume", "fade", "eq", "reverb")
         AlertDialog(
             onDismissRequest = { activeToolDialog = null },
             title = {
@@ -101,9 +103,28 @@ fun AudioStudioScreen(
                         Slider(value = editFadeOutMs, onValueChange = { editFadeOutMs = it }, valueRange = 0f..5000f)
                         Text("Fade envelopes are applied during timeline preview. Export audio processing is a separate pending engine task.", color = VexTextSecondary, fontSize = 11.sp)
                     }
+                } else if (activeToolDialog == "eq") {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("Choose a playback EQ preset", color = VexTextSecondary, fontSize = 11.sp)
+                        listOf("Flat", "Bass Boost", "Classical", "Dance", "Hip Hop", "Jazz", "Pop", "Rock").forEach { preset ->
+                            TextButton(onClick = { editEqPreset = preset }) {
+                                Text(
+                                    text = (if (editEqPreset == preset) "✓ " else "") + preset,
+                                    color = if (editEqPreset == preset) VexAccentLight else VexTextPrimary
+                                )
+                            }
+                        }
+                        Text("EQ is applied during timeline preview. Export processing is still pending.", color = VexTextSecondary, fontSize = 11.sp)
+                    }
+                } else if (activeToolDialog == "reverb") {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("Reverb: ${(editReverbLevel * 100).toInt()}%", color = VexTextPrimary)
+                        Slider(value = editReverbLevel, onValueChange = { editReverbLevel = it }, valueRange = 0f..1f)
+                        Text("Reverb is applied during timeline preview. Export processing is still pending.", color = VexTextSecondary, fontSize = 11.sp)
+                    }
                 } else {
                     Text(
-                        "This control is visible in the interface, but its audio DSP processor is not connected yet. It will not be falsely marked as applied. The processor and export support are scheduled for the Audio DSP phase.",
+                        "This processor is not connected yet. It will remain unavailable until its real-time DSP and export implementation are ready.",
                         color = VexTextSecondary
                     )
                 }
@@ -111,15 +132,22 @@ fun AudioStudioScreen(
             confirmButton = {
                 if (supportedEdit && selectedAudioClip != null) {
                     Button(onClick = {
-                        if (activeToolDialog == "volume") {
-                            viewModel.setClipVolume(selectedAudioClip.id, editVolume)
-                        } else {
-                            viewModel.updateAudioProperties(
+                        when (activeToolDialog) {
+                            "volume" -> viewModel.setClipVolume(selectedAudioClip.id, editVolume)
+                            "fade" -> viewModel.updateAudioProperties(
                                 selectedAudioClip.id,
                                 selectedAudioClip.audioProperties.copy(
                                     fadeInMs = editFadeInMs.toLong(),
                                     fadeOutMs = editFadeOutMs.toLong()
                                 )
+                            )
+                            "eq" -> viewModel.updateAudioProperties(
+                                selectedAudioClip.id,
+                                selectedAudioClip.audioProperties.copy(eqPreset = editEqPreset)
+                            )
+                            "reverb" -> viewModel.updateAudioProperties(
+                                selectedAudioClip.id,
+                                selectedAudioClip.audioProperties.copy(reverbLevel = editReverbLevel)
                             )
                         }
                         activeToolDialog = null
