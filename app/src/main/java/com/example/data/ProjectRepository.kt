@@ -14,7 +14,7 @@ class ProjectRepository(private val context: Context) {
 
     private val projectsFile = File(context.filesDir, "vex_projects.json")
     private val autoSaveFile = File(context.filesDir, "vex_autosave.json")
-    private val database = Room.databaseBuilder(context.applicationContext, VexProjectDatabase::class.java, "vex_projects.db").build()
+    private val database = Room.databaseBuilder(context.applicationContext, VexProjectDatabase::class.java, "vex_projects.db").allowMainThreadQueries().build()
     private val projectDao = database.projectDao()
 
     private val _projects = MutableStateFlow<List<Project>>(emptyList())
