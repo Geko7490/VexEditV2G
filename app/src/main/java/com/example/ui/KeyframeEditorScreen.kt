@@ -246,19 +246,28 @@ fun KeyframeEditorScreen(
                             drawLine(gridColor, Offset(0f, size.height / 2f), Offset(size.width, size.height / 2f), 1f)
                             drawLine(gridColor, Offset(size.width / 2f, 0f), Offset(size.width / 2f, size.height), 1f)
 
-                            // Bézier S-curve
+                            // Preview the selected easing curve rather than showing a fixed S-curve.
+                            val controls = when (selectedCurve) {
+                                InterpolationType.LINEAR -> Offset(size.width * 0.33f, size.height * 0.67f) to
+                                    Offset(size.width * 0.67f, size.height * 0.33f)
+                                InterpolationType.EASE_IN -> Offset(size.width * 0.45f, size.height * 0.96f) to
+                                    Offset(size.width * 0.82f, size.height * 0.55f)
+                                InterpolationType.EASE_OUT -> Offset(size.width * 0.18f, size.height * 0.45f) to
+                                    Offset(size.width * 0.55f, size.height * 0.04f)
+                                InterpolationType.EASE_IN_OUT -> Offset(size.width * 0.4f, size.height * 0.9f) to
+                                    Offset(size.width * 0.6f, size.height * 0.1f)
+                            }
                             val path = Path().apply {
                                 moveTo(4f, size.height - 4f)
                                 cubicTo(
-                                    size.width * 0.4f, size.height - 4f,
-                                    size.width * 0.6f, 4f,
+                                    controls.first.x, controls.first.y,
+                                    controls.second.x, controls.second.y,
                                     size.width - 4f, 4f
                                 )
                             }
                             drawPath(path, color = VexAccent, style = Stroke(width = 3f, cap = StrokeCap.Round))
-                            // Handle points
-                            drawCircle(Color.White, radius = 4f, center = Offset(size.width * 0.4f, size.height * 0.7f))
-                            drawCircle(Color.White, radius = 4f, center = Offset(size.width * 0.6f, size.height * 0.3f))
+                            drawCircle(Color.White, radius = 4f, center = controls.first)
+                            drawCircle(Color.White, radius = 4f, center = controls.second)
                         }
 
                         Spacer(modifier = Modifier.height(6.dp))
