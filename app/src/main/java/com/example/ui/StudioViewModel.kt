@@ -274,24 +274,15 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                     break
                 } else {
                     _playheadPositionMs.value = newPos
-                    // Check if we crossed into a different video clip
-                    val oldClip = proj.clips.filter { it.trackType == TrackType.VIDEO && it.mediaType == MediaType.VIDEO }
-                        .find { currentPos >= it.startTimeMs && currentPos < (it.startTimeMs + it.durationMs) }
-                    val newClip = proj.clips.filter { it.trackType == TrackType.VIDEO && it.mediaType == MediaType.VIDEO }
-                        .find { newPos >= it.startTimeMs && newPos < (it.startTimeMs + it.durationMs) }
-                    val audioTypes = setOf(TrackType.AUDIO_MUSIC, TrackType.AUDIO_VOICE, TrackType.AUDIO_SFX)
-                    val oldAudioIds = proj.clips.filter {
-                        it.trackType in audioTypes && currentPos >= it.startTimeMs && currentPos < it.startTimeMs + it.durationMs
-                    }.map { it.id }.sorted()
-                    val newAudioIds = proj.clips.filter {
-                        it.trackType in audioTypes && newPos >= it.startTimeMs && newPos < it.startTimeMs + it.durationMs
-                    }.map { it.id }.sorted()
-
-                    if (oldClip?.id != newClip?.id || oldAudioIds != newAudioIds) {
-                        syncPlayerToPlayhead(newPos)
-                    }
+                    // Refresh gain envelopes and keep all active audio clips synchronized.
+                    syncPlayerToPlayhead(newPos)
                 }
-                delay(30) // Smooth ~33 FPS UI updates
+                val tickDelayMs = when (_settings.value.performanceMode) {
+                    PerformanceMode.LOW -> 66L
+                    PerformanceMode.MEDIUM -> 33L
+                    PerformanceMode.HIGH -> 16L
+                }
+                delay(tickDelayMs)
             }
         }
     }
@@ -607,9 +598,10 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     fun setClipVolume(clipId: String, volume: Float) {
         val project = _currentProject.value ?: return
         val clip = project.clips.find { it.id == clipId } ?: return
+        val safeVolume = volume.coerceIn(0f, 1f)
         val updated = clip.copy(
-            volume = volume,
-            audioProperties = clip.audioProperties.copy(volume = volume)
+            volume = safeVolume,
+            audioProperties = clip.audioProperties.copy(volume = safeVolume)
         )
         val updatedClips = project.clips.map { if (it.id == clipId) updated else it }
         val updatedProject = project.copy(clips = updatedClips)
