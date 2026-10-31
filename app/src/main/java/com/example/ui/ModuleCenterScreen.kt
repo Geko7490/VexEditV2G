@@ -50,12 +50,12 @@ fun ModuleCenterScreen(
         val mod = selectedModuleForDetails!!
         Dialog(onDismissRequest = { selectedModuleForDetails = null }) {
             Card(
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(8.dp),
                 colors = CardDefaults.cardColors(containerColor = VexPanel),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp)
-                    .border(1.dp, VexBorder, RoundedCornerShape(12.dp))
+                    .border(1.dp, VexBorder, RoundedCornerShape(8.dp))
             ) {
                 Column(
                     modifier = Modifier
