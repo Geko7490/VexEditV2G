@@ -383,7 +383,7 @@ fun StudioScreen(
                                 if (playerState.status == PlaybackStatus.ERROR) {
                                     Surface(
                                         color = Color.Black.copy(alpha = 0.88f),
-                                        shape = RoundedCornerShape(12.dp),
+                                        shape = RoundedCornerShape(8.dp),
                                         border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFF5252)),
                                         modifier = Modifier.padding(16.dp).align(Alignment.Center)
                                     ) {
@@ -464,7 +464,7 @@ fun StudioScreen(
                     if (activeTrimmingInfo != null) {
                         Surface(
                             color = Color.Black.copy(alpha = 0.85f),
-                            shape = RoundedCornerShape(20.dp),
+                            shape = RoundedCornerShape(8.dp),
                             border = androidx.compose.foundation.BorderStroke(1.dp, VexAccent),
                             modifier = Modifier
                                 .align(Alignment.TopCenter)
