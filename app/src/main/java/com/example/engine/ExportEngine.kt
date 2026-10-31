@@ -592,14 +592,17 @@ class ExportEngine(private val context: Context) {
     ) {
         canvas.drawColor(Color.parseColor("#0C0C10"))
 
+        val trackOrder = project.tracks.mapIndexed { index, track -> track.id to index }.toMap()
         val visualClips = project.clips.filter {
             it.trackType == TrackType.VIDEO || it.mediaType == MediaType.PHOTO || it.mediaType == MediaType.VIDEO
-        }
-        val activeClip = visualClips.find {
+        }.sortedBy { trackOrder[it.trackId] ?: Int.MAX_VALUE }
+        val activeClips = visualClips.filter {
             currentMs >= it.startTimeMs && currentMs < (it.startTimeMs + it.durationMs)
         }
 
-        if (activeClip != null) {
+        // Composite every active visual layer in track order instead of exporting only
+        // the first matching clip. Higher tracks are drawn later and appear above lower tracks.
+        activeClips.forEach { activeClip ->
             var clipBitmap: Bitmap? = null
 
             if (activeClip.mediaType == MediaType.PHOTO) {
@@ -673,20 +676,7 @@ class ExportEngine(private val context: Context) {
             if (clipBitmap != null && !clipBitmap.isRecycled) {
                 val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
 
-                val violetGlow = activeClip.effects.find { it.type == EffectType.VIOLET_GLOW && it.isEnabled }
-                val warmth = activeClip.effects.find { it.type == EffectType.WARMTH && it.isEnabled }
-                val coolCyan = activeClip.effects.find { it.type == EffectType.COOL_CYAN && it.isEnabled }
-                val vintage = activeClip.effects.find { it.type == EffectType.VINTAGE && it.isEnabled }
-
-                if (violetGlow != null) {
-                    paint.colorFilter = PorterDuffColorFilter(Color.parseColor("#55A855F7"), PorterDuff.Mode.SRC_ATOP)
-                } else if (warmth != null) {
-                    paint.colorFilter = PorterDuffColorFilter(Color.parseColor("#44FF9800"), PorterDuff.Mode.SRC_ATOP)
-                } else if (coolCyan != null) {
-                    paint.colorFilter = PorterDuffColorFilter(Color.parseColor("#4400BCD4"), PorterDuff.Mode.SRC_ATOP)
-                } else if (vintage != null) {
-                    paint.colorFilter = PorterDuffColorFilter(Color.parseColor("#55704214"), PorterDuff.Mode.SRC_ATOP)
-                }
+                paint.colorFilter = buildEffectColorFilter(activeClip.effects)
 
                 val posX = getInterpolatedValue(activeClip, KeyframeParam.POSITION_X, currentMs)
                 val posY = getInterpolatedValue(activeClip, KeyframeParam.POSITION_Y, currentMs)
@@ -709,6 +699,7 @@ class ExportEngine(private val context: Context) {
                 canvas.restore()
             }
         }
+        }
 
         // Draw active Text clips
         val textClips = project.clips.filter { it.trackType == TrackType.TEXT }
@@ -723,6 +714,71 @@ class ExportEngine(private val context: Context) {
             }
             canvas.drawText(activeText.name, width / 2f, height * 0.85f, textPaint)
         }
+    }
+
+    /**
+     * Shared export-side color grading for enabled clip effects. Multiple compatible
+     * grading effects are composed into one matrix so they no longer overwrite each other.
+     */
+    private fun buildEffectColorFilter(effects: List<ClipEffect>): ColorMatrixColorFilter? {
+        val matrix = ColorMatrix()
+        var changed = false
+        effects.filter { it.isEnabled }.forEach { effect ->
+            val amount = effect.intensity.coerceIn(0f, 2f)
+            when (effect.type) {
+                EffectType.BRIGHTNESS -> {
+                    val offset = (amount - 1f) * 48f
+                    matrix.postConcat(ColorMatrix(floatArrayOf(
+                        1f,0f,0f,0f,offset, 0f,1f,0f,0f,offset,
+                        0f,0f,1f,0f,offset, 0f,0f,0f,1f,0f
+                    )))
+                    changed = true
+                }
+                EffectType.CONTRAST -> {
+                    val contrast = 1f + (amount * 0.35f)
+                    val offset = 128f * (1f - contrast)
+                    matrix.postConcat(ColorMatrix(floatArrayOf(
+                        contrast,0f,0f,0f,offset, 0f,contrast,0f,0f,offset,
+                        0f,0f,contrast,0f,offset, 0f,0f,0f,1f,0f
+                    )))
+                    changed = true
+                }
+                EffectType.WARMTH -> {
+                    matrix.postConcat(ColorMatrix(floatArrayOf(
+                        1f + .08f*amount,0f,0f,0f,8f*amount,
+                        0f,1f + .025f*amount,0f,0f,2f*amount,
+                        0f,0f,1f - .10f*amount,0f,0f,
+                        0f,0f,0f,1f,0f
+                    )))
+                    changed = true
+                }
+                EffectType.COOL_CYAN -> {
+                    matrix.postConcat(ColorMatrix(floatArrayOf(
+                        1f - .10f*amount,0f,0f,0f,0f,
+                        0f,1f + .025f*amount,0f,0f,2f*amount,
+                        0f,0f,1f + .10f*amount,0f,8f*amount,
+                        0f,0f,0f,1f,0f
+                    )))
+                    changed = true
+                }
+                EffectType.VINTAGE -> {
+                    matrix.postConcat(ColorMatrix(floatArrayOf(
+                        1f,0f,0f,0f,8f*amount, 0f,.94f,0f,0f,4f*amount,
+                        0f,0f,.82f,0f,0f, 0f,0f,0f,1f,0f
+                    )))
+                    changed = true
+                }
+                EffectType.VIOLET_GLOW -> {
+                    matrix.postConcat(ColorMatrix(floatArrayOf(
+                        1f,0f,0f,0f,5f*amount, 0f,.92f,0f,0f,0f,
+                        0f,0f,1.08f,0f,8f*amount, 0f,0f,0f,1f,0f
+                    )))
+                    changed = true
+                }
+                else -> Unit
+            }
+        }
+        return if (changed) ColorMatrixColorFilter(matrix) else null
     }
 
     private fun getInterpolatedValue(clip: MediaClip, param: KeyframeParam, currentMs: Long): Float {
