@@ -447,9 +447,23 @@ class ExampleRobolectricTest {
     )
     repository.saveProject(project)
 
-    val restored = ProjectRepository(context).projects.value.first { it.id == project.id }
-    val restoredTrack = restored.tracks.first { it.id == "track_audio_1" }
-    val restoredAudio = restored.clips.first { it.id == audioClip.id }.audioProperties
+    // saveProject persists through the repository's IO queue; wait for the Room/JSON
+    // write to finish before constructing a fresh repository instance.
+    val persistenceFile = java.io.File(context.filesDir, "vex_projects.json")
+    repeat(100) {
+      if (persistenceFile.exists() && persistenceFile.readText().contains(project.id)) return@repeat
+      Thread.sleep(50)
+    }
+    val restoredRepository = ProjectRepository(context)
+    var restored: Project? = null
+    repeat(100) {
+      restored = restoredRepository.projects.value.firstOrNull { it.id == project.id }
+      if (restored != null) return@repeat
+      Thread.sleep(50)
+    }
+    val loadedProject = requireNotNull(restored) { "Persisted project did not load within 5 seconds" }
+    val restoredTrack = loadedProject.tracks.first { it.id == "track_audio_1" }
+    val restoredAudio = loadedProject.clips.first { it.id == audioClip.id }.audioProperties
     assertEquals("Custom Music", restoredTrack.title)
     assertEquals(true, restoredTrack.isMuted)
     assertEquals(true, restoredTrack.isSolo)
