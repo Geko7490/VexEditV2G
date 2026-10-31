@@ -32,7 +32,8 @@ data class AudioTrackPlayback(
     val speed: Float = 1f,
     val shouldPlay: Boolean,
     val eqPreset: String = "Flat",
-    val reverbLevel: Float = 0f
+    val reverbLevel: Float = 0f,
+    val uriString: String = ""
 )
 
 data class PlayerState(
@@ -250,7 +251,10 @@ class StudioMediaPlayer(context: Context) {
 
     /** Synchronizes every audio clip active at the current timeline position. */
     fun bindAudioTracks(tracks: List<AudioTrackPlayback>) {
-        val validTracks = tracks.filter { it.filePath.isNotBlank() && File(it.filePath).isFile }
+        val validTracks = tracks.filter {
+            (it.filePath.isNotBlank() && File(it.filePath).isFile) ||
+                it.uriString.startsWith("content://") || it.uriString.startsWith("file://")
+        }
         val activeIds = validTracks.map { it.id }.toSet()
         (audioPlayers.keys - activeIds).forEach { id ->
             releasePreviewEffects(id)
@@ -260,8 +264,9 @@ class StudioMediaPlayer(context: Context) {
 
         validTracks.forEach { track ->
             val targetVolume = if (track.muted) 0f else track.volume.coerceIn(0f, 1f)
+            val sourceKey = if (track.filePath.isNotBlank() && File(track.filePath).isFile) track.filePath else track.uriString
             val existing = audioPlayers[track.id]
-            if (existing != null && audioPaths[track.id] == track.filePath) {
+            if (existing != null && audioPaths[track.id] == sourceKey) {
                 try {
                     existing.setVolume(targetVolume, targetVolume)
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -278,7 +283,7 @@ class StudioMediaPlayer(context: Context) {
             } else {
                 releasePreviewEffects(track.id)
                 try { existing?.release() } catch (_: Exception) {}
-                audioPaths[track.id] = track.filePath
+                audioPaths[track.id] = sourceKey
                 val player = MediaPlayer()
                 audioPlayers[track.id] = player
                 try {
@@ -288,7 +293,11 @@ class StudioMediaPlayer(context: Context) {
                             .setUsage(AudioAttributes.USAGE_MEDIA)
                             .build()
                     )
-                    player.setDataSource(track.filePath)
+                    if (track.filePath.isNotBlank() && File(track.filePath).isFile) {
+                        player.setDataSource(track.filePath)
+                    } else {
+                        player.setDataSource(appContext, Uri.parse(track.uriString))
+                    }
                     player.setOnPreparedListener { mp ->
                         try {
                             mp.setVolume(targetVolume, targetVolume)
