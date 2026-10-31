@@ -194,27 +194,42 @@ fun KeyframeEditorScreen(
                 if (activeBottomTab == "Transform" || activeBottomTab == "Motion") {
                 KeyframeParamRow(
                     label = "Position X", valueText = String.format(java.util.Locale.US, "%.1f", posX),
-                    value = posX, valueRange = -100f..100f, onValueChange = { posX = it }
+                    value = posX, valueRange = -100f..100f, onValueChange = { value ->
+                        posX = value
+                        targetClip?.let { clip -> selectedKeyframe?.takeIf { it.param == KeyframeParam.POSITION_X }?.let { viewModel.updateKeyframe(clip.id, it.id, value = value) } }
+                    }
                 ) { targetClip?.let { viewModel.addOrUpdateKeyframe(it.id, KeyframeParam.POSITION_X, posX, selectedCurve) } }
                 KeyframeParamRow(
                     label = "Position Y", valueText = String.format(java.util.Locale.US, "%.1f", posY),
-                    value = posY, valueRange = -100f..100f, onValueChange = { posY = it }
+                    value = posY, valueRange = -100f..100f, onValueChange = { value ->
+                        posY = value
+                        targetClip?.let { clip -> selectedKeyframe?.takeIf { it.param == KeyframeParam.POSITION_Y }?.let { viewModel.updateKeyframe(clip.id, it.id, value = value) } }
+                    }
                 ) { targetClip?.let { viewModel.addOrUpdateKeyframe(it.id, KeyframeParam.POSITION_Y, posY, selectedCurve) } }
                 if (activeBottomTab == "Transform") {
                 KeyframeParamRow(
                     label = "Scale", valueText = "${scaleVal.toInt()}%", value = scaleVal,
-                    valueRange = 10f..300f, onValueChange = { scaleVal = it }
+                    valueRange = 10f..300f, onValueChange = { value ->
+                        scaleVal = value
+                        targetClip?.let { clip -> selectedKeyframe?.takeIf { it.param == KeyframeParam.SCALE }?.let { viewModel.updateKeyframe(clip.id, it.id, value = value) } }
+                    }
                 ) { targetClip?.let { viewModel.addOrUpdateKeyframe(it.id, KeyframeParam.SCALE, scaleVal, selectedCurve) } }
                 }
                 KeyframeParamRow(
                     label = "Rotation", valueText = "${rotVal.toInt()}°", value = rotVal,
-                    valueRange = -180f..180f, onValueChange = { rotVal = it }
+                    valueRange = -180f..180f, onValueChange = { value ->
+                        rotVal = value
+                        targetClip?.let { clip -> selectedKeyframe?.takeIf { it.param == KeyframeParam.ROTATION }?.let { viewModel.updateKeyframe(clip.id, it.id, value = value) } }
+                    }
                 ) { targetClip?.let { viewModel.addOrUpdateKeyframe(it.id, KeyframeParam.ROTATION, rotVal, selectedCurve) } }
                 }
                 if (activeBottomTab == "Opacity") {
                 KeyframeParamRow(
                     label = "Opacity", valueText = "${opacityVal.toInt()}%", value = opacityVal,
-                    valueRange = 0f..100f, onValueChange = { opacityVal = it }
+                    valueRange = 0f..100f, onValueChange = { value ->
+                        opacityVal = value
+                        targetClip?.let { clip -> selectedKeyframe?.takeIf { it.param == KeyframeParam.OPACITY }?.let { viewModel.updateKeyframe(clip.id, it.id, value = value) } }
+                    }
                 ) { targetClip?.let { viewModel.addOrUpdateKeyframe(it.id, KeyframeParam.OPACITY, opacityVal, selectedCurve) } }
                 }
 
@@ -277,7 +292,8 @@ fun KeyframeEditorScreen(
                                                 .fillMaxWidth()
                                                 .clip(RoundedCornerShape(3.dp))
                                                 .background(if (isSel) VexAccent else VexPanelElevated)
-                                                .clickable { selectedCurve = type }
+                                                .clickable { selectedCurve = type
+                                                    targetClip?.let { clip -> selectedKeyframe?.let { viewModel.updateKeyframe(clip.id, it.id, curve = type) } } }
                                                 .padding(vertical = 3.dp),
                                             contentAlignment = Alignment.Center
                                         ) {
@@ -361,6 +377,7 @@ fun KeyframeEditorScreen(
                     targetClip?.let {
                         val keyframe = transformKeyframes.getOrNull(index) ?: return@let
                         selectedKeyframeId = keyframe.id
+                        selectedCurve = keyframe.curve
                         viewModel.setPlayheadPosition(it.startTimeMs + keyframe.timeMs)
                     }
                 }
