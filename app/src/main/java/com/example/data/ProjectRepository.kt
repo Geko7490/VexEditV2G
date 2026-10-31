@@ -1,6 +1,7 @@
 package com.example.data
 
 import android.content.Context
+import androidx.room.Room
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -13,6 +14,8 @@ class ProjectRepository(private val context: Context) {
 
     private val projectsFile = File(context.filesDir, "vex_projects.json")
     private val autoSaveFile = File(context.filesDir, "vex_autosave.json")
+    private val database = Room.databaseBuilder(context.applicationContext, VexProjectDatabase::class.java, "vex_projects.db").build()
+    private val projectDao = database.projectDao()
 
     private val _projects = MutableStateFlow<List<Project>>(emptyList())
     val projects: StateFlow<List<Project>> = _projects.asStateFlow()
@@ -22,31 +25,49 @@ class ProjectRepository(private val context: Context) {
     }
 
     private fun loadProjects() {
-        if (!projectsFile.exists()) {
-            _projects.value = emptyList()
-        } else {
-            try {
-                val jsonString = projectsFile.readText()
-                val list = deserializeProjects(jsonString)
-                // Filter out any legacy dummy/seed projects
-                val cleanList = list.filterNot {
-                    it.id in listOf("proj_midnight", "proj_drill", "proj_summer", "proj_cinematic")
+        try {
+            val roomProjects = projectDao.getAll()
+            val loaded = if (roomProjects.isNotEmpty()) {
+                roomProjects.mapNotNull { row ->
+                    try { deserializeProject(JSONObject(row.payload)) } catch (_: Exception) { null }
                 }
-                _projects.value = cleanList
-                if (cleanList.size != list.size) {
-                    persistProjects(cleanList)
+            } else if (projectsFile.exists()) {
+                // One-time migration from the previous JSON-only project store.
+                deserializeProjects(projectsFile.readText()).also { legacy ->
+                    if (legacy.isNotEmpty()) persistProjects(legacy)
                 }
-            } catch (e: Exception) {
-                e.printStackTrace()
-                _projects.value = emptyList()
+            } else emptyList()
+
+            val cleanList = loaded.filterNot {
+                it.id in listOf("proj_midnight", "proj_drill", "proj_summer", "proj_cinematic")
             }
+            _projects.value = cleanList
+            if (cleanList.size != loaded.size) persistProjects(cleanList)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            // Keep projects recoverable if Room cannot read its store.
+            _projects.value = try {
+                if (projectsFile.exists()) deserializeProjects(projectsFile.readText()) else emptyList()
+            } catch (_: Exception) { emptyList() }
         }
     }
 
     private fun persistProjects(list: List<Project>) {
         try {
-            val jsonString = serializeProjects(list)
-            projectsFile.writeText(jsonString)
+            val rows = list.map { project ->
+                ProjectEntity(
+                    id = project.id,
+                    title = project.title,
+                    payload = serializeProject(project).toString(),
+                    updatedAt = project.lastEditedTimestamp
+                )
+            }
+            database.runInTransaction {
+                projectDao.deleteAll()
+                if (rows.isNotEmpty()) projectDao.upsertAll(rows)
+            }
+            // Retain a JSON snapshot for recovery and migration from older app versions.
+            projectsFile.writeText(serializeProjects(list))
         } catch (e: Exception) {
             e.printStackTrace()
         }
