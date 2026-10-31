@@ -5,22 +5,19 @@ import android.graphics.Bitmap
 import android.media.AudioAttributes
 import android.media.MediaMetadataRetriever
 import android.media.MediaPlayer
-import android.os.Build
 import android.util.Log
 import android.view.Surface
+import android.net.Uri
+import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
 
-enum class PlaybackStatus {
-    IDLE,
-    LOADING,
-    READY,
-    PLAYING,
-    PAUSED,
-    ERROR
-}
+enum class PlaybackStatus { IDLE, LOADING, READY, PLAYING, PAUSED, ERROR }
 
 data class PlayerState(
     val status: PlaybackStatus = PlaybackStatus.IDLE,
@@ -31,50 +28,90 @@ data class PlayerState(
 )
 
 /**
- * StudioMediaPlayer provides real-time hardware-accelerated video decoding,
- * preview playback, audio playback, frame-accurate seeking, and codec error handling
- * for VexEdit Studio.
+ * Media3-backed preview player. The public methods intentionally retain the old
+ * StudioMediaPlayer API so the editor UI/ViewModel can migrate without a rewrite.
+ * Audio track playback remains isolated until the timeline mixer is upgraded.
  */
-class StudioMediaPlayer(private val context: Context) {
-    companion object {
-        private const val TAG = "StudioMediaPlayer"
-    }
+class StudioMediaPlayer(context: Context) {
+    companion object { private const val TAG = "StudioMediaPlayer" }
 
-    private var mediaPlayer: MediaPlayer? = null
+    private val appContext = context.applicationContext
+    private val videoPlayer: ExoPlayer = ExoPlayer.Builder(appContext).build()
     private var surface: Surface? = null
-
     private var currentFilePath: String? = null
-    private var isPrepared = false
-    private var isPreparing = false
-    private var pendingSeekMs: Long? = null
     private var desiredPlaying = false
-    private var desiredVolume: Float = 1.0f
-    private var isMuted: Boolean = false
+    private var desiredVolume = 1f
+    private var isMuted = false
+    private var pendingSeekMs: Long = 0L
+    private var isPrepared = false
 
-    private val _playerState = MutableStateFlow(PlayerState())
-    val playerState: StateFlow<PlayerState> = _playerState.asStateFlow()
-
-    // Secondary player for background audio music/voice tracks
     private var audioPlayer: MediaPlayer? = null
     private var currentAudioPath: String? = null
     private var isAudioPrepared = false
 
-    private var isSeeking = false
-    private var queuedSeekMs: Long? = null
+    private val _playerState = MutableStateFlow(PlayerState())
+    val playerState: StateFlow<PlayerState> = _playerState.asStateFlow()
+
+    init {
+        videoPlayer.addListener(object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                when (playbackState) {
+                    Player.STATE_BUFFERING -> {
+                        isPrepared = false
+                        _playerState.value = PlayerState(PlaybackStatus.LOADING, currentFilePath.orEmpty())
+                    }
+                    Player.STATE_READY -> {
+                        isPrepared = true
+                        if (pendingSeekMs > 0L) {
+                            videoPlayer.seekTo(pendingSeekMs)
+                            pendingSeekMs = 0L
+                        }
+                        if (desiredPlaying) {
+                            videoPlayer.play()
+                            _playerState.value = PlayerState(PlaybackStatus.PLAYING, currentFilePath.orEmpty(), isReady = true)
+                        } else {
+                            _playerState.value = PlayerState(PlaybackStatus.READY, currentFilePath.orEmpty(), isReady = true)
+                        }
+                    }
+                    Player.STATE_ENDED -> {
+                        desiredPlaying = false
+                        _playerState.value = PlayerState(PlaybackStatus.PAUSED, currentFilePath.orEmpty(), isReady = true)
+                    }
+                    Player.STATE_IDLE -> isPrepared = false
+                }
+            }
+
+            override fun onPlayerError(error: PlaybackException) {
+                isPrepared = false
+                val unsupported = error.errorCode == PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED ||
+                    error.errorCode == PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES
+                Log.e(TAG, "Media3 playback error", error)
+                _playerState.value = PlayerState(
+                    status = PlaybackStatus.ERROR,
+                    filePath = currentFilePath.orEmpty(),
+                    errorMessage = error.localizedMessage ?: "Medya oynatılamadı. Codec veya dosya biçimi desteklenmiyor olabilir.",
+                    isCodecUnsupported = unsupported
+                )
+            }
+
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                if (isPrepared) {
+                    _playerState.value = _playerState.value.copy(
+                        status = if (isPlaying) PlaybackStatus.PLAYING else PlaybackStatus.PAUSED,
+                        isReady = true
+                    )
+                }
+            }
+        })
+    }
 
     fun attachSurface(newSurface: Surface?) {
-        this.surface = newSurface
+        surface = newSurface
         try {
-            if (newSurface != null && newSurface.isValid) {
-                mediaPlayer?.setSurface(newSurface)
-                if (isPrepared && !desiredPlaying) {
-                    seekInternal(mediaPlayer!!, currentPositionMs)
-                }
-            } else {
-                mediaPlayer?.setSurface(null)
-            }
+            if (newSurface != null && newSurface.isValid) videoPlayer.setVideoSurface(newSurface)
+            else videoPlayer.clearVideoSurface()
         } catch (e: Exception) {
-            Log.e(TAG, "Error attaching surface to player", e)
+            Log.e(TAG, "Unable to attach preview surface", e)
         }
     }
 
@@ -82,280 +119,85 @@ class StudioMediaPlayer(private val context: Context) {
         filePath: String,
         startOffsetMs: Long,
         shouldPlay: Boolean,
-        volume: Float = 1.0f,
+        volume: Float = 1f,
         muted: Boolean = false
     ) {
-        desiredVolume = volume
-        isMuted = muted
-        val effVol = if (muted) 0f else volume.coerceIn(0f, 1f)
-
-        if (filePath.isEmpty()) {
-            stopVideo()
-            _playerState.value = PlayerState(PlaybackStatus.IDLE)
-            return
-        }
-
-        val file = File(filePath)
-        if (!file.exists() || file.length() == 0L) {
-            stopVideo()
-            _playerState.value = PlayerState(
-                status = PlaybackStatus.ERROR,
-                filePath = filePath,
-                errorMessage = "Video dosyası bulunamadı veya diskte yok",
-                isCodecUnsupported = false
-            )
-            return
-        }
-
-        if (currentFilePath == filePath && mediaPlayer != null) {
-            // Already loaded same video file
-            try {
-                mediaPlayer?.setVolume(effVol, effVol)
-            } catch (_: Exception) {}
-
-            if (shouldPlay != desiredPlaying) {
-                desiredPlaying = shouldPlay
-                if (isPrepared) {
-                    if (shouldPlay) {
-                        try {
-                            mediaPlayer?.start()
-                            _playerState.value = PlayerState(PlaybackStatus.PLAYING, filePath, isReady = true)
-                        } catch (e: Exception) {
-                            Log.e(TAG, "start error", e)
-                        }
-                    } else {
-                        try {
-                            mediaPlayer?.pause()
-                            _playerState.value = PlayerState(PlaybackStatus.PAUSED, filePath, isReady = true)
-                        } catch (e: Exception) {
-                            Log.e(TAG, "pause error", e)
-                        }
-                    }
-                }
-            }
-
-            if (!shouldPlay) {
-                seekVideo(startOffsetMs)
-            }
-            return
-        }
-
-        // New file or first load
-        currentFilePath = filePath
         desiredPlaying = shouldPlay
-        pendingSeekMs = startOffsetMs.coerceAtLeast(0L)
-        _playerState.value = PlayerState(PlaybackStatus.LOADING, filePath)
-        initAndPreparePlayer(filePath, effVol)
-    }
+        desiredVolume = volume.coerceIn(0f, 1f)
+        isMuted = muted
+        videoPlayer.volume = if (muted) 0f else desiredVolume
 
-    private fun initAndPreparePlayer(filePath: String, volume: Float) {
-        try {
-            mediaPlayer?.release()
-        } catch (_: Exception) {}
-
-        isPrepared = false
-        isPreparing = true
-
-        try {
-            val player = MediaPlayer().apply {
-                setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setContentType(AudioAttributes.CONTENT_TYPE_MOVIE)
-                        .setUsage(AudioAttributes.USAGE_MEDIA)
-                        .build()
-                )
-                if (surface != null && surface!!.isValid) {
-                    setSurface(surface)
-                }
-                setDataSource(filePath)
-                setOnPreparedListener { mp ->
-                    isPrepared = true
-                    isPreparing = false
-                    try {
-                        if (surface != null && surface!!.isValid) {
-                            mp.setSurface(surface)
-                        }
-                        mp.setVolume(volume, volume)
-                        val targetSeek = pendingSeekMs ?: 0L
-                        seekInternal(mp, targetSeek)
-                        pendingSeekMs = null
-
-                        if (desiredPlaying) {
-                            mp.start()
-                            _playerState.value = PlayerState(PlaybackStatus.PLAYING, filePath, isReady = true)
-                        } else {
-                            // Briefly prime the video decoder so the first frame is immediately pushed
-                            // to the SurfaceTexture rather than remaining un-rendered black
-                            try {
-                                mp.start()
-                                mp.pause()
-                                seekInternal(mp, targetSeek)
-                            } catch (_: Exception) {}
-                            _playerState.value = PlayerState(PlaybackStatus.READY, filePath, isReady = true)
-                        }
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error in onPrepared", e)
-                        _playerState.value = PlayerState(
-                            status = PlaybackStatus.ERROR,
-                            filePath = filePath,
-                            errorMessage = "Video hazırlanırken hata oluştu: ${e.localizedMessage ?: "Bilinmeyen hata"}"
-                        )
-                    }
-                }
-                setOnSeekCompleteListener {
-                    isSeeking = false
-                    val next = queuedSeekMs
-                    if (next != null) {
-                        queuedSeekMs = null
-                        seekVideo(next)
-                    }
-                }
-                setOnCompletionListener {
-                    if (desiredPlaying) {
-                        desiredPlaying = false
-                        _playerState.value = PlayerState(PlaybackStatus.PAUSED, filePath, isReady = true)
-                    }
-                }
-                setOnErrorListener { _, what, extra ->
-                    Log.e(TAG, "MediaPlayer error: what=$what, extra=$extra for $filePath")
-                    isPrepared = false
-                    isPreparing = false
-                    isSeeking = false
-                    queuedSeekMs = null
-                    val isUnsupported = extra == -1010 || extra == -1007 || what == 200 || extra == -1004
-                    val msg = when {
-                        extra == -1010 || extra == -1007 -> "Desteklenmeyen video/ses codec'i (Örn: H.265 10-bit / AC-3 Ses)"
-                        extra == -1004 -> "Medya I/O okuma hatası"
-                        what == MediaPlayer.MEDIA_ERROR_SERVER_DIED -> "Android medya servisi çöktü"
-                        else -> "Video decode veya oynatma hatası (Kod: $what, $extra)"
-                    }
-                    _playerState.value = PlayerState(
-                        status = PlaybackStatus.ERROR,
-                        filePath = filePath,
-                        errorMessage = msg,
-                        isCodecUnsupported = isUnsupported
-                    )
-                    true
-                }
-                prepareAsync()
-            }
-            mediaPlayer = player
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to initialize MediaPlayer for $filePath", e)
-            isPrepared = false
-            isPreparing = false
+        if (filePath.isBlank()) {
+            stopVideo()
+            return
+        }
+        val file = File(filePath)
+        if (!file.exists() || file.length() <= 0L) {
+            stopVideo()
             _playerState.value = PlayerState(
                 status = PlaybackStatus.ERROR,
                 filePath = filePath,
-                errorMessage = "Video açılamadı: ${e.localizedMessage ?: "Desteklenmeyen biçim"}"
+                errorMessage = "Video dosyası bulunamadı veya boş."
             )
+            return
+        }
+
+        if (currentFilePath != filePath) {
+            currentFilePath = filePath
+            pendingSeekMs = startOffsetMs.coerceAtLeast(0L)
+            isPrepared = false
+            _playerState.value = PlayerState(PlaybackStatus.LOADING, filePath)
+            videoPlayer.setMediaItem(MediaItem.fromUri(Uri.fromFile(file)))
+            videoPlayer.prepare()
+            if (shouldPlay) videoPlayer.play() else videoPlayer.pause()
+        } else {
+            if (isPrepared && !shouldPlay) videoPlayer.seekTo(startOffsetMs.coerceAtLeast(0L))
+            if (shouldPlay) videoPlayer.play() else videoPlayer.pause()
         }
     }
 
     fun play() {
         desiredPlaying = true
-        if (isPrepared && mediaPlayer != null) {
-            try {
-                val effVol = if (isMuted) 0f else desiredVolume.coerceIn(0f, 1f)
-                mediaPlayer?.setVolume(effVol, effVol)
-                mediaPlayer?.start()
-                _playerState.value = _playerState.value.copy(status = PlaybackStatus.PLAYING)
-            } catch (e: Exception) {
-                Log.e(TAG, "play error", e)
-            }
-        }
-        if (isAudioPrepared) {
-            try { audioPlayer?.start() } catch (_: Exception) {}
-        }
+        if (isPrepared) videoPlayer.play()
+        if (isAudioPrepared) try { audioPlayer?.start() } catch (_: Exception) {}
     }
 
     fun pause() {
         desiredPlaying = false
-        if (isPrepared && mediaPlayer != null) {
-            try {
-                mediaPlayer?.pause()
-                _playerState.value = _playerState.value.copy(status = PlaybackStatus.PAUSED)
-            } catch (e: Exception) {
-                Log.e(TAG, "pause error", e)
-            }
-        }
-        if (isAudioPrepared) {
-            try { audioPlayer?.pause() } catch (_: Exception) {}
-        }
+        videoPlayer.pause()
+        if (isAudioPrepared) try { audioPlayer?.pause() } catch (_: Exception) {}
     }
-
-    private var lastSeekTimestamp = 0L
 
     fun seekVideo(offsetMs: Long) {
         val target = offsetMs.coerceAtLeast(0L)
-        if (isPrepared && mediaPlayer != null) {
-            if (isSeeking) {
-                queuedSeekMs = target
-                return
-            }
-            isSeeking = true
-            try {
-                seekInternal(mediaPlayer!!, target)
-            } catch (e: Exception) {
-                isSeeking = false
-                Log.e(TAG, "seek error", e)
-            }
-        } else {
-            pendingSeekMs = target
-        }
-    }
-
-    private fun seekInternal(mp: MediaPlayer, targetMs: Long) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            mp.seekTo(targetMs, MediaPlayer.SEEK_CLOSEST)
-        } else {
-            mp.seekTo(targetMs.toInt())
-        }
+        if (isPrepared) videoPlayer.seekTo(target) else pendingSeekMs = target
     }
 
     fun setVolume(volume: Float, muted: Boolean) {
-        desiredVolume = volume
+        desiredVolume = volume.coerceIn(0f, 1f)
         isMuted = muted
-        val effVol = if (muted) 0f else volume.coerceIn(0f, 1f)
-        try {
-            mediaPlayer?.setVolume(effVol, effVol)
-        } catch (_: Exception) {}
+        videoPlayer.volume = if (muted) 0f else desiredVolume
     }
 
     val currentPositionMs: Long
-        get() {
-            return if (isPrepared && mediaPlayer != null) {
-                try {
-                    mediaPlayer!!.currentPosition.toLong()
-                } catch (_: Exception) {
-                    0L
-                }
-            } else 0L
-        }
+        get() = if (isPrepared) videoPlayer.currentPosition.coerceAtLeast(0L) else 0L
 
-    val isPlaying: Boolean
-        get() {
-            return if (isPrepared && mediaPlayer != null) {
-                try {
-                    mediaPlayer!!.isPlaying
-                } catch (_: Exception) {
-                    false
-                }
-            } else false
-        }
-
-    val isVideoPrepared: Boolean
-        get() = isPrepared
+    val isPlaying: Boolean get() = videoPlayer.isPlaying
+    val isVideoPrepared: Boolean get() = isPrepared
 
     fun stopVideo() {
         desiredPlaying = false
         isPrepared = false
-        isPreparing = false
         currentFilePath = null
+        pendingSeekMs = 0L
         try {
-            mediaPlayer?.stop()
-            mediaPlayer?.reset()
-        } catch (_: Exception) {}
+            videoPlayer.pause()
+            videoPlayer.stop()
+            videoPlayer.clearMediaItems()
+        } catch (e: Exception) {
+            Log.w(TAG, "Video stop failed", e)
+        }
+        _playerState.value = PlayerState(PlaybackStatus.IDLE)
     }
 
     fun extractFrameBitmap(filePath: String, timeMs: Long): Bitmap? {
@@ -380,33 +222,31 @@ class StudioMediaPlayer(private val context: Context) {
         audioPath: String,
         startOffsetMs: Long,
         shouldPlay: Boolean,
-        volume: Float = 1.0f,
+        volume: Float = 1f,
         muted: Boolean = false
     ) {
         if (audioPath.isEmpty() || !File(audioPath).exists()) {
             stopAudio()
             return
         }
-        val effVol = if (muted) 0f else volume.coerceIn(0f, 1f)
+        val effectiveVolume = if (muted) 0f else volume.coerceIn(0f, 1f)
         if (currentAudioPath == audioPath && audioPlayer != null) {
-            try { audioPlayer?.setVolume(effVol, effVol) } catch (_: Exception) {}
-            if (shouldPlay && isAudioPrepared) {
-                try { audioPlayer?.start() } catch (_: Exception) {}
-            } else if (!shouldPlay && isAudioPrepared) {
-                try {
+            try {
+                audioPlayer?.setVolume(effectiveVolume, effectiveVolume)
+                if (shouldPlay && isAudioPrepared && audioPlayer?.isPlaying != true) audioPlayer?.start()
+                else if (!shouldPlay && isAudioPrepared) {
                     audioPlayer?.pause()
-                    audioPlayer?.seekTo(startOffsetMs.coerceAtLeast(0L).toInt())
-                } catch (_: Exception) {}
-            }
+                    audioPlayer?.seekTo(startOffsetMs.coerceAtLeast(0L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
+                }
+            } catch (_: Exception) {}
             return
         }
+
         currentAudioPath = audioPath
-        try {
-            audioPlayer?.release()
-        } catch (_: Exception) {}
+        try { audioPlayer?.release() } catch (_: Exception) {}
         isAudioPrepared = false
         try {
-            val ap = MediaPlayer().apply {
+            audioPlayer = MediaPlayer().apply {
                 setAudioAttributes(
                     AudioAttributes.Builder()
                         .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
@@ -417,38 +257,34 @@ class StudioMediaPlayer(private val context: Context) {
                 setOnPreparedListener { mp ->
                     isAudioPrepared = true
                     try {
-                        mp.setVolume(effVol, effVol)
-                        mp.seekTo(startOffsetMs.coerceAtLeast(0L).toInt())
-                        if (shouldPlay && desiredPlaying) {
-                            mp.start()
-                        }
+                        mp.setVolume(effectiveVolume, effectiveVolume)
+                        mp.seekTo(startOffsetMs.coerceAtLeast(0L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
+                        if (shouldPlay && desiredPlaying) mp.start()
                     } catch (_: Exception) {}
+                }
+                setOnErrorListener { _, what, extra ->
+                    Log.e(TAG, "Audio playback error: $what/$extra")
+                    isAudioPrepared = false
+                    true
                 }
                 prepareAsync()
             }
-            audioPlayer = ap
         } catch (e: Exception) {
             Log.e(TAG, "AudioPlayer init failed", e)
+            isAudioPrepared = false
         }
     }
 
     fun stopAudio() {
         currentAudioPath = null
         isAudioPrepared = false
-        try {
-            audioPlayer?.stop()
-            audioPlayer?.reset()
-        } catch (_: Exception) {}
+        try { audioPlayer?.stop(); audioPlayer?.reset() } catch (_: Exception) {}
     }
 
     fun release() {
-        stopVideo()
         stopAudio()
-        try {
-            mediaPlayer?.release()
-            mediaPlayer = null
-            audioPlayer?.release()
-            audioPlayer = null
-        } catch (_: Exception) {}
+        try { audioPlayer?.release() } catch (_: Exception) {}
+        audioPlayer = null
+        try { videoPlayer.release() } catch (_: Exception) {}
     }
 }
