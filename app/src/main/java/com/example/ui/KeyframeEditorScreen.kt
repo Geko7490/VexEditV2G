@@ -61,6 +61,8 @@ fun KeyframeEditorScreen(
     var opacityVal by remember(targetClip) { mutableStateOf(targetClip?.transform?.opacity ?: 100f) }
 
     var selectedCurve by remember { mutableStateOf(InterpolationType.EASE_IN_OUT) }
+    var selectedKeyframeId by remember(targetClip?.id) { mutableStateOf<String?>(null) }
+    val selectedKeyframe = targetClip?.keyframes?.firstOrNull { it.id == selectedKeyframeId }
     var activeBottomTab by remember { mutableStateOf("Curves") } // Transform, Motion, Opacity, Curves
 
     LaunchedEffect(targetClip, playheadMs) {
@@ -356,13 +358,21 @@ fun KeyframeEditorScreen(
             KeyframeTrackRow(
                 label = "Transform", keyframeOffsets = transformOffsets,
                 onKeyframeClick = { index ->
-                    targetClip?.let { viewModel.setPlayheadPosition(it.startTimeMs + transformKeyframes[index].timeMs) }
+                    targetClip?.let {
+                        val keyframe = transformKeyframes.getOrNull(index) ?: return@let
+                        selectedKeyframeId = keyframe.id
+                        viewModel.setPlayheadPosition(it.startTimeMs + keyframe.timeMs)
+                    }
                 }
             )
             KeyframeTrackRow(
                 label = "Opacity", keyframeOffsets = opacityOffsets,
                 onKeyframeClick = { index ->
-                    targetClip?.let { viewModel.setPlayheadPosition(it.startTimeMs + opacityKeyframes[index].timeMs) }
+                    targetClip?.let {
+                        val keyframe = opacityKeyframes.getOrNull(index) ?: return@let
+                        selectedKeyframeId = keyframe.id
+                        viewModel.setPlayheadPosition(it.startTimeMs + keyframe.timeMs)
+                    }
                 }
             )
         }
@@ -377,6 +387,24 @@ fun KeyframeEditorScreen(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            IconButton(
+                onClick = {
+                    val clip = targetClip
+                    val keyframe = selectedKeyframe
+                    if (clip != null && keyframe != null) {
+                        viewModel.removeKeyframe(clip.id, keyframe.id)
+                        selectedKeyframeId = null
+                    }
+                },
+                enabled = selectedKeyframe != null
+            ) {
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = "Delete selected keyframe",
+                    tint = if (selectedKeyframe != null) VexMeterRed else VexTextMuted
+                )
+            }
+
             TextButton(
                 onClick = { targetClip?.let { viewModel.jumpToPreviousKeyframe(it.id) } }
             ) {
