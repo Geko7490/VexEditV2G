@@ -226,7 +226,9 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                 volume = (clip.volume * trackGain * fadeInGain * fadeOutGain).coerceIn(0f, 1f),
                 muted = muted,
                 speed = clip.speed,
-                shouldPlay = _isPlaying.value
+                shouldPlay = _isPlaying.value,
+                eqPreset = clip.audioProperties.eqPreset,
+                reverbLevel = clip.audioProperties.reverbLevel
             )
         }
         player.bindAudioTracks(audioPlayback);
