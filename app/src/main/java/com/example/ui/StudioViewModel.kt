@@ -394,25 +394,11 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             durationMs = remainingDuration
         )
 
-        val trackClips = project.clips.filter { it.trackId == targetClip.trackId }.sortedBy { it.startTimeMs }.toMutableList()
-        val targetIndex = trackClips.indexOfFirst { it.id == targetClip.id }
-        if (targetIndex >= 0) {
-            trackClips[targetIndex] = firstPart
-            trackClips.add(targetIndex + 1, secondPart)
-        } else {
-            trackClips.add(firstPart)
-            trackClips.add(secondPart)
+        // Split only the selected clip. Keep every other clip's absolute timeline
+        // position so existing gaps and overlaps are not silently destroyed.
+        val allClips = project.clips.flatMap { clip ->
+            if (clip.id == targetClip.id) listOf(firstPart, secondPart) else listOf(clip)
         }
-
-        var currentStart = 0L
-        val finalTrackClips = trackClips.map { c ->
-            val updated = c.copy(startTimeMs = currentStart)
-            currentStart += c.durationMs
-            updated
-        }
-
-        val otherClips = project.clips.filter { it.trackId != targetClip.trackId }
-        val allClips = otherClips + finalTrackClips
         val maxEnd = allClips.maxOfOrNull { it.startTimeMs + it.durationMs } ?: 0L
 
         val updatedProject = project.copy(clips = allClips, durationMs = maxEnd)
