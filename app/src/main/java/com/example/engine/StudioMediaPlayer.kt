@@ -391,7 +391,7 @@ class StudioMediaPlayer(context: Context) {
     }
 
     fun stopAudio() {
-        (equalizers.keys + reverbs.keys).toSet().forEach { releasePreviewEffects(it) }
+        (equalizers.keys + bassBoosts.keys + reverbs.keys).toSet().forEach { releasePreviewEffects(it) }
         audioPlayers.values.forEach { player -> try { player.release() } catch (_: Exception) {} }
         audioPlayers.clear()
         audioPaths.clear()
