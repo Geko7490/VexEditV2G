@@ -46,8 +46,13 @@ private data class EffectPresetEntry(
     val blend: Float
 )
 
-private fun effectPreviewFilter(type: EffectType, intensity: Float): ColorFilter? {
-    val amount = intensity.coerceIn(0f, 2f)
+private val supportedEffectTypes = setOf(
+    EffectType.VIOLET_GLOW, EffectType.BRIGHTNESS, EffectType.CONTRAST,
+    EffectType.WARMTH, EffectType.COOL_CYAN, EffectType.VINTAGE
+)
+
+private fun effectPreviewFilter(type: EffectType, intensity: Float, opacity: Float): ColorFilter? {
+    val amount = (intensity * opacity).coerceIn(0f, 2f)
     val values = when (type) {
         EffectType.BRIGHTNESS -> {
             val offset = (amount - 1f) * 48f
@@ -98,6 +103,7 @@ fun EffectsLabScreen(
             for (index in 0 until stored.length()) {
                 val item = stored.optJSONObject(index) ?: continue
                 val type = runCatching { EffectType.valueOf(item.optString("type")) }.getOrNull() ?: continue
+                if (type !in supportedEffectTypes) continue
                 savedPresets.add(EffectPresetEntry(
                     name = item.optString("name", "Preset"), type = type,
                     intensity = item.optDouble("intensity", 1.0).toFloat(),
@@ -142,12 +148,9 @@ fun EffectsLabScreen(
     val categories = listOf("Cinematic", "Color", "Light")
 
     // Only expose effects that currently have a real preview and export implementation.
-    val effectsList = listOf(
-        EffectType.VIOLET_GLOW, EffectType.BRIGHTNESS, EffectType.CONTRAST,
-        EffectType.WARMTH, EffectType.COOL_CYAN, EffectType.VINTAGE
-    ).map { it to it.title }
+    val effectsList = supportedEffectTypes.toList().sortedBy { it.title }.map { it to it.title }
     val filteredEffects = effectsList.filter { it.first.category.name.equals(selectedCategory, ignoreCase = true) }
-    val previewColorFilter = if (isBeforeMode) null else effectPreviewFilter(selectedEffectType, intensity)
+    val previewColorFilter = if (isBeforeMode) null else effectPreviewFilter(selectedEffectType, intensity, opacity)
 
     LaunchedEffect(targetClip, selectedEffectType) {
         val current = targetClip?.effects?.firstOrNull { it.type == selectedEffectType }
@@ -444,15 +447,6 @@ fun EffectsLabScreen(
                     onValueChange = { intensity = it }
                 )
 
-                // Radius Slider
-                EffectSliderRow(
-                    label = "Radius",
-                    value = radius,
-                    valueText = String.format(java.util.Locale.US, "%.2f", radius),
-                    range = 0f..50f,
-                    onValueChange = { radius = it }
-                )
-
                 // Opacity Slider
                 EffectSliderRow(
                     label = "Opacity",
@@ -462,14 +456,6 @@ fun EffectsLabScreen(
                     onValueChange = { opacity = it }
                 )
 
-                // Blend Slider
-                EffectSliderRow(
-                    label = "Blend",
-                    value = blend,
-                    valueText = String.format(java.util.Locale.US, "%.2f", blend),
-                    range = 0f..1f,
-                    onValueChange = { blend = it }
-                )
             }
 
             Spacer(modifier = Modifier.height(16.dp))
