@@ -55,6 +55,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     private val _selectedClipId = MutableStateFlow<String?>(null)
     val selectedClipId: StateFlow<String?> = _selectedClipId.asStateFlow()
 
+    private val settingsPrefs = application.getSharedPreferences("vex_settings", android.content.Context.MODE_PRIVATE)
     private val _settings = MutableStateFlow(AppSettings())
     val settings: StateFlow<AppSettings> = _settings.asStateFlow()
 
@@ -89,6 +90,13 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     private var playbackJob: Job? = null
 
     init {
+        val savedLanguage = settingsPrefs.getString("language", AppLanguage.TR.code)
+        val savedPerformance = settingsPrefs.getString("performance_mode", PerformanceMode.HIGH.name)
+        _settings.value = AppSettings(
+            language = AppLanguage.values().firstOrNull { it.code == savedLanguage } ?: AppLanguage.TR,
+            performanceMode = PerformanceMode.values().firstOrNull { it.name == savedPerformance } ?: PerformanceMode.HIGH
+        )
+
         // Room loads asynchronously; observe the project list so the last edited project
         // becomes available after the database finishes loading.
         viewModelScope.launch {
@@ -646,6 +654,51 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         projectRepo.saveProject(updatedProject)
     }
 
+    fun addOrUpdateKeyframes(
+        clipId: String,
+        values: Map<KeyframeParam, Float>,
+        curve: InterpolationType = InterpolationType.EASE_IN_OUT
+    ) {
+        val project = _currentProject.value ?: return
+        val clip = project.clips.find { it.id == clipId } ?: return
+        val relativeTime = _playheadPositionMs.value - clip.startTimeMs
+        if (relativeTime < 0L || relativeTime > clip.durationMs || values.isEmpty()) return
+
+        pushUndoState(project)
+        val updatedKeyframes = clip.keyframes.toMutableList()
+        values.forEach { (param, value) ->
+            val existing = updatedKeyframes.indexOfFirst {
+                it.param == param && kotlin.math.abs(it.timeMs - relativeTime) < 300L
+            }
+            val keyframe = Keyframe(timeMs = relativeTime, param = param, value = value, curve = curve)
+            if (existing >= 0) updatedKeyframes[existing] = keyframe else updatedKeyframes.add(keyframe)
+        }
+        val updated = clip.copy(keyframes = updatedKeyframes.sortedBy { it.timeMs })
+        val updatedProject = project.copy(clips = project.clips.map { if (it.id == clipId) updated else it })
+        _currentProject.value = updatedProject
+        projectRepo.saveProject(updatedProject)
+    }
+
+    fun jumpToPreviousKeyframe(clipId: String) {
+        val clip = _currentProject.value?.clips?.find { it.id == clipId } ?: return
+        val current = _playheadPositionMs.value
+        val previous = clip.keyframes.asSequence()
+            .map { clip.startTimeMs + it.timeMs }
+            .filter { it < current - 40L }
+            .maxOrNull() ?: clip.startTimeMs
+        setPlayheadPosition(previous.coerceAtLeast(0L))
+    }
+
+    fun jumpToNextKeyframe(clipId: String) {
+        val clip = _currentProject.value?.clips?.find { it.id == clipId } ?: return
+        val current = _playheadPositionMs.value
+        val next = clip.keyframes.asSequence()
+            .map { clip.startTimeMs + it.timeMs }
+            .filter { it > current + 40L }
+            .minOrNull() ?: (clip.startTimeMs + clip.durationMs)
+        setPlayheadPosition(next.coerceAtMost(_currentProject.value?.durationMs ?: next))
+    }
+
     // Evaluates interpolated keyframe value at current playhead
     fun getInterpolatedValue(clip: MediaClip, param: KeyframeParam): Float {
         val paramKeyframes = clip.keyframes.filter { it.param == param }.sortedBy { it.timeMs }
@@ -896,21 +949,30 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     fun setLanguage(lang: AppLanguage) {
         _settings.value = _settings.value.copy(language = lang)
+        settingsPrefs.edit().putString("language", lang.code).apply()
     }
 
     fun setPerformanceMode(mode: PerformanceMode) {
         _settings.value = _settings.value.copy(performanceMode = mode)
+        settingsPrefs.edit().putString("performance_mode", mode.name).apply()
     }
 
-    fun clearCache() {
-        _settings.value = _settings.value.copy(cacheSizeMb = 0L)
-    }
-
-    fun restoreAutoSave() {
-        val recovered = projectRepo.restoreAutoSave()
-        if (recovered != null) {
-            selectProject(recovered)
+    fun clearCache(): Boolean {
+        if (_isExporting.value) return false
+        var succeeded = true
+        listOfNotNull(getApplication<Application>().cacheDir, getApplication<Application>().externalCacheDir).forEach { directory ->
+            directory.listFiles()?.forEach { file ->
+                if (!file.deleteRecursively()) succeeded = false
+            }
         }
+        if (succeeded) _settings.value = _settings.value.copy(cacheSizeMb = 0L)
+        return succeeded
+    }
+
+    fun restoreAutoSave(): Boolean {
+        val recovered = projectRepo.restoreAutoSave() ?: return false
+        selectProject(recovered)
+        return true
     }
 
     override fun onCleared() {
