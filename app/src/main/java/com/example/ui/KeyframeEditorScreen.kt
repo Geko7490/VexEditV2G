@@ -373,6 +373,7 @@ fun KeyframeEditorScreen(
 
             KeyframeTrackRow(
                 label = "Transform", keyframeOffsets = transformOffsets,
+                selectedIndex = transformKeyframes.indexOfFirst { it.id == selectedKeyframeId },
                 onKeyframeClick = { index ->
                     targetClip?.let {
                         val keyframe = transformKeyframes.getOrNull(index) ?: return@let
@@ -384,6 +385,7 @@ fun KeyframeEditorScreen(
             )
             KeyframeTrackRow(
                 label = "Opacity", keyframeOffsets = opacityOffsets,
+                selectedIndex = opacityKeyframes.indexOfFirst { it.id == selectedKeyframeId },
                 onKeyframeClick = { index ->
                     targetClip?.let {
                         val keyframe = opacityKeyframes.getOrNull(index) ?: return@let
@@ -549,6 +551,7 @@ fun KeyframeParamRow(
 fun KeyframeTrackRow(
     label: String,
     keyframeOffsets: List<Float>,
+    selectedIndex: Int = -1,
     onKeyframeClick: (Int) -> Unit
 ) {
     Row(
@@ -576,7 +579,7 @@ fun KeyframeTrackRow(
                         .wrapContentWidth(Alignment.End)
                         .clickable { onKeyframeClick(index) }
                 ) {
-                    Text("◆", color = VexAccentLight, fontSize = 12.sp)
+                    Text("◆", color = if (index == selectedIndex) Color.White else VexAccentLight, fontSize = if (index == selectedIndex) 15.sp else 12.sp)
                 }
             }
         }
