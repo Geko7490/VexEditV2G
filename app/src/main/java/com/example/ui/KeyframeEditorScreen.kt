@@ -380,6 +380,7 @@ fun KeyframeEditorScreen(
                     targetClip?.let {
                         val keyframe = opacityKeyframes.getOrNull(index) ?: return@let
                         selectedKeyframeId = keyframe.id
+                        selectedCurve = keyframe.curve
                         viewModel.setPlayheadPosition(it.startTimeMs + keyframe.timeMs)
                     }
                 }
