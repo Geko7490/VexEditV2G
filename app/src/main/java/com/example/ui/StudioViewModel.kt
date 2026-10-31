@@ -697,11 +697,11 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         clipId: String,
         values: Map<KeyframeParam, Float>,
         curve: InterpolationType = InterpolationType.EASE_IN_OUT
-    ) {
-        val project = _currentProject.value ?: return
-        val clip = project.clips.find { it.id == clipId } ?: return
+    ): List<Keyframe> {
+        val project = _currentProject.value ?: return emptyList()
+        val clip = project.clips.find { it.id == clipId } ?: return emptyList()
         val relativeTime = _playheadPositionMs.value - clip.startTimeMs
-        if (relativeTime < 0L || relativeTime > clip.durationMs || values.isEmpty()) return
+        if (relativeTime < 0L || relativeTime > clip.durationMs || values.isEmpty()) return emptyList()
 
         pushUndoState(project)
         val updatedKeyframes = clip.keyframes.toMutableList()
@@ -712,10 +712,12 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             val keyframe = Keyframe(timeMs = relativeTime, param = param, value = value, curve = curve)
             if (existing >= 0) updatedKeyframes[existing] = keyframe else updatedKeyframes.add(keyframe)
         }
-        val updated = clip.copy(keyframes = updatedKeyframes.sortedBy { it.timeMs })
+        val sortedKeyframes = updatedKeyframes.sortedBy { it.timeMs }
+        val updated = clip.copy(keyframes = sortedKeyframes)
         val updatedProject = project.copy(clips = project.clips.map { if (it.id == clipId) updated else it })
         _currentProject.value = updatedProject
         projectRepo.saveProject(updatedProject)
+        return sortedKeyframes.filter { it.timeMs == relativeTime && it.param in values.keys }
     }
 
     fun jumpToPreviousKeyframe(clipId: String) {
