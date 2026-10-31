@@ -87,7 +87,7 @@ fun AudioStudioScreen(
                 } else if (activeToolDialog == "volume") {
                     Column {
                         Text("Volume: ${(editVolume * 100).toInt()}%", color = VexTextPrimary)
-                        Slider(value = editVolume, onValueChange = { editVolume = it }, valueRange = 0f..2f)
+                        Slider(value = editVolume, onValueChange = { editVolume = it }, valueRange = 0f..1f)
                     }
                 } else if (activeToolDialog == "fade") {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
