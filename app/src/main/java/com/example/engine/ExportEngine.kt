@@ -701,10 +701,11 @@ class ExportEngine(private val context: Context) {
         }
         }
 
-        // Draw active Text clips
+        // Draw every active text layer in its track order.
         val textClips = project.clips.filter { it.trackType == TrackType.TEXT }
-        val activeText = textClips.find { currentMs >= it.startTimeMs && currentMs < (it.startTimeMs + it.durationMs) }
-        if (activeText != null) {
+            .filter { currentMs >= it.startTimeMs && currentMs < (it.startTimeMs + it.durationMs) }
+            .sortedBy { trackOrder[it.trackId] ?: Int.MAX_VALUE }
+        textClips.forEachIndexed { index, activeText ->
             val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = Color.WHITE
                 textSize = width * 0.07f
@@ -712,7 +713,7 @@ class ExportEngine(private val context: Context) {
                 isFakeBoldText = true
                 setShadowLayer(14f, 0f, 4f, Color.parseColor("#A855F7"))
             }
-            canvas.drawText(activeText.name, width / 2f, height * 0.85f, textPaint)
+            canvas.drawText(activeText.name, width / 2f, height * (0.85f - index * 0.09f), textPaint)
         }
     }
 
