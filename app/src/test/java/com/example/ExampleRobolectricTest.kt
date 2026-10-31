@@ -104,4 +104,56 @@ class ExampleRobolectricTest {
     assertEquals(1000L, startExtendedClip?.sourceStartMs)
     assertEquals(8000L, startExtendedClip?.durationMs)
   }
+  @Test
+  fun `split preserves timeline gaps and maps source time using clip speed`() {
+    val application = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.StudioViewModel(application)
+
+    val clipToSplit = com.example.data.MediaClip(
+      id = "split_target",
+      name = "Main Video.mp4",
+      trackId = "track_video_1",
+      trackType = com.example.data.TrackType.VIDEO,
+      startTimeMs = 5000L,
+      sourceStartMs = 1000L,
+      durationMs = 10000L,
+      sourceDurationMs = 20000L,
+      speed = 1.5f
+    )
+    val laterClip = com.example.data.MediaClip(
+      id = "later_clip",
+      name = "Later Video.mp4",
+      trackId = "track_video_1",
+      trackType = com.example.data.TrackType.VIDEO,
+      startTimeMs = 25000L,
+      durationMs = 5000L,
+      sourceDurationMs = 5000L
+    )
+    val project = com.example.data.Project(
+      id = "split_gap_test",
+      title = "Split Gap Test",
+      clips = listOf(clipToSplit, laterClip),
+      durationMs = 30000L
+    )
+
+    vm.projectRepo.saveProject(project)
+    vm.selectProject(project)
+    vm.selectClip(clipToSplit.id)
+    vm.setPlayheadPosition(9000L)
+    vm.splitClipAtPlayhead()
+
+    val clips = vm.currentProject.value!!.clips
+      .filter { it.trackId == "track_video_1" }
+      .sortedBy { it.startTimeMs }
+
+    assertEquals(3, clips.size)
+    assertEquals(5000L, clips[0].startTimeMs)
+    assertEquals(4000L, clips[0].durationMs)
+    assertEquals(9000L, clips[1].startTimeMs)
+    assertEquals(6000L, clips[1].durationMs)
+    assertEquals(7000L, clips[1].sourceStartMs)
+    assertEquals(25000L, clips[2].startTimeMs)
+    assertEquals(30000L, vm.currentProject.value?.durationMs)
+  }
+
 }
