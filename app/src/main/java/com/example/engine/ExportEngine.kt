@@ -862,10 +862,28 @@ class ExportEngine(private val context: Context) {
         project: Project,
         totalDurationMs: Long
     ): File? {
-        val audioSources = project.clips.filter {
-            (it.trackType == TrackType.AUDIO_MUSIC || it.mediaType == MediaType.AUDIO) ||
-            (it.mediaType == MediaType.VIDEO && !it.audioProperties.isMuted && it.volume > 0.01f)
-        }.sortedBy { it.startTimeMs }
+        val audioTrackTypes = setOf(TrackType.AUDIO_MUSIC, TrackType.AUDIO_VOICE, TrackType.AUDIO_SFX)
+        val tracksById = project.tracks.associateBy { it.id }
+        val hasSolo = project.tracks.any { it.isSolo } ||
+            project.clips.any { it.trackType in audioTrackTypes && it.audioProperties.isSolo }
+        val audioSources = project.clips.filter { clip ->
+            val isAudioSource = clip.trackType in audioTrackTypes ||
+                clip.mediaType == MediaType.AUDIO ||
+                (clip.mediaType == MediaType.VIDEO && clip.trackType == TrackType.VIDEO)
+            val track = tracksById[clip.trackId]
+            val isSoloed = track?.isSolo == true || clip.audioProperties.isSolo
+            val isMuted = clip.audioProperties.isMuted || track?.isMuted == true || (hasSolo && !isSoloed)
+            isAudioSource && !isMuted && clip.volume > 0.01f && clip.durationMs > 0L
+        }.sortedWith(
+            compareBy<MediaClip> {
+                when (it.trackType) {
+                    TrackType.AUDIO_MUSIC -> 0
+                    TrackType.AUDIO_VOICE -> 1
+                    TrackType.AUDIO_SFX -> 2
+                    else -> 3
+                }
+            }.thenBy { it.startTimeMs }
+        )
 
         if (audioSources.isEmpty()) return null
 
@@ -955,6 +973,8 @@ class ExportEngine(private val context: Context) {
             audioExtractor.seekTo(sourceStartUs, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
 
             val maxDurationUs = (totalDurationMs * 1000L)
+            val clipEndUs = minOf(maxDurationUs, (clip.startTimeMs + clip.durationMs) * 1000L)
+            val playbackSpeed = clip.speed.coerceIn(0.25f, 4f)
             var baseAudioPtsUs = -1L
 
             while (true) {
@@ -964,8 +984,10 @@ class ExportEngine(private val context: Context) {
                 if (baseAudioPtsUs < 0L) {
                     baseAudioPtsUs = rawPts
                 }
-                val relativePtsUs = (rawPts - baseAudioPtsUs) + (clip.startTimeMs * 1000L)
-                if (relativePtsUs > maxDurationUs) break
+                val sourceRelativeUs = (rawPts - baseAudioPtsUs).coerceAtLeast(0L)
+                val timelineRelativeUs = (sourceRelativeUs.toDouble() / playbackSpeed.toDouble()).toLong()
+                val relativePtsUs = timelineRelativeUs + (clip.startTimeMs * 1000L)
+                if (relativePtsUs > clipEndUs) break
 
                 bufferInfo.presentationTimeUs = relativePtsUs.coerceAtLeast(0L)
                 bufferInfo.flags = audioExtractor.sampleFlags
