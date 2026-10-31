@@ -194,9 +194,9 @@ fun SettingsScreen(
             ) {
                 Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     listOf(
-                        Triple(PerformanceMode.LOW, Strings.get("perf_low", lang), "Optimized for older devices & battery saving (360p preview)"),
-                        Triple(PerformanceMode.MEDIUM, Strings.get("perf_med", lang), "Balanced quality & timeline smoothness (720p preview)"),
-                        Triple(PerformanceMode.HIGH, Strings.get("perf_high", lang), "Real-time effects shaders & 60 FPS playback (1080p preview)")
+                        Triple(PerformanceMode.LOW, Strings.get("perf_low", lang), "Reduced timeline UI refresh (~15 FPS) for lower load"),
+                        Triple(PerformanceMode.MEDIUM, Strings.get("perf_med", lang), "Balanced timeline UI refresh (~30 FPS)"),
+                        Triple(PerformanceMode.HIGH, Strings.get("perf_high", lang), "Smooth timeline UI refresh (up to ~60 FPS)")
                     ).forEach { (mode, title, desc) ->
                         val isSel = settings.performanceMode == mode
                         Row(
