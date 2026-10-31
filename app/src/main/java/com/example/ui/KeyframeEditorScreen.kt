@@ -19,7 +19,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -59,6 +62,16 @@ fun KeyframeEditorScreen(
 
     var selectedCurve by remember { mutableStateOf(InterpolationType.EASE_IN_OUT) }
     var activeBottomTab by remember { mutableStateOf("Curves") } // Transform, Motion, Opacity, Curves
+
+    LaunchedEffect(targetClip, playheadMs) {
+        targetClip?.let { clip ->
+            posX = viewModel.getInterpolatedValue(clip, KeyframeParam.POSITION_X)
+            posY = viewModel.getInterpolatedValue(clip, KeyframeParam.POSITION_Y)
+            scaleVal = viewModel.getInterpolatedValue(clip, KeyframeParam.SCALE)
+            rotVal = viewModel.getInterpolatedValue(clip, KeyframeParam.ROTATION)
+            opacityVal = viewModel.getInterpolatedValue(clip, KeyframeParam.OPACITY)
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -126,7 +139,12 @@ fun KeyframeEditorScreen(
                     coil.compose.AsyncImage(
                         model = clipFile,
                         contentDescription = null,
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .offset(x = posX.dp, y = posY.dp)
+                            .scale((scaleVal / 100f).coerceIn(0.1f, 3f))
+                            .rotate(rotVal)
+                            .alpha((opacityVal / 100f).coerceIn(0f, 1f)),
                         contentScale = ContentScale.Crop
                     )
                 } else {
@@ -141,25 +159,20 @@ fun KeyframeEditorScreen(
                 // Draggable interactive "TITLES" bounding box matching Screenshot 7
                 Box(
                     modifier = Modifier
+                        .fillMaxSize()
                         .offset(x = posX.dp, y = posY.dp)
+                        .scale((scaleVal / 100f).coerceIn(0.1f, 3f))
+                        .rotate(rotVal)
                         .border(1.5.dp, VexAccent, RoundedCornerShape(2.dp))
-                        .padding(horizontal = 14.dp, vertical = 8.dp)
                         .pointerInput(Unit) {
                             detectDragGestures { change, dragAmount ->
                                 change.consume()
-                                posX += dragAmount.x * 0.5f
-                                posY += dragAmount.y * 0.5f
+                                posX = (posX + dragAmount.x * 0.5f).coerceIn(-100f, 100f)
+                                posY = (posY + dragAmount.y * 0.5f).coerceIn(-100f, 100f)
                             }
                         },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "TITLES",
-                        color = Color.White.copy(alpha = opacityVal / 100f),
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-
                     // Corner handle squares
                     Box(modifier = Modifier.size(6.dp).background(VexAccent).align(Alignment.TopStart))
                     Box(modifier = Modifier.size(6.dp).background(VexAccent).align(Alignment.TopEnd))
@@ -176,21 +189,26 @@ fun KeyframeEditorScreen(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                KeyframeParamRow(label = "Position X", value = String.format(java.util.Locale.US, "%.1f", posX)) {
-                    targetClip?.let { viewModel.addOrUpdateKeyframe(it.id, KeyframeParam.POSITION_X, posX, selectedCurve) }
-                }
-                KeyframeParamRow(label = "Position Y", value = String.format(java.util.Locale.US, "%.1f", posY)) {
-                    targetClip?.let { viewModel.addOrUpdateKeyframe(it.id, KeyframeParam.POSITION_Y, posY, selectedCurve) }
-                }
-                KeyframeParamRow(label = "Scale", value = "${scaleVal.toInt()}%") {
-                    targetClip?.let { viewModel.addOrUpdateKeyframe(it.id, KeyframeParam.SCALE, scaleVal, selectedCurve) }
-                }
-                KeyframeParamRow(label = "Rotation", value = "${rotVal.toInt()}°") {
-                    targetClip?.let { viewModel.addOrUpdateKeyframe(it.id, KeyframeParam.ROTATION, rotVal, selectedCurve) }
-                }
-                KeyframeParamRow(label = "Opacity", value = "${opacityVal.toInt()}%") {
-                    targetClip?.let { viewModel.addOrUpdateKeyframe(it.id, KeyframeParam.OPACITY, opacityVal, selectedCurve) }
-                }
+                KeyframeParamRow(
+                    label = "Position X", valueText = String.format(java.util.Locale.US, "%.1f", posX),
+                    value = posX, valueRange = -100f..100f, onValueChange = { posX = it }
+                ) { targetClip?.let { viewModel.addOrUpdateKeyframe(it.id, KeyframeParam.POSITION_X, posX, selectedCurve) } }
+                KeyframeParamRow(
+                    label = "Position Y", valueText = String.format(java.util.Locale.US, "%.1f", posY),
+                    value = posY, valueRange = -100f..100f, onValueChange = { posY = it }
+                ) { targetClip?.let { viewModel.addOrUpdateKeyframe(it.id, KeyframeParam.POSITION_Y, posY, selectedCurve) } }
+                KeyframeParamRow(
+                    label = "Scale", valueText = "${scaleVal.toInt()}%", value = scaleVal,
+                    valueRange = 10f..300f, onValueChange = { scaleVal = it }
+                ) { targetClip?.let { viewModel.addOrUpdateKeyframe(it.id, KeyframeParam.SCALE, scaleVal, selectedCurve) } }
+                KeyframeParamRow(
+                    label = "Rotation", valueText = "${rotVal.toInt()}°", value = rotVal,
+                    valueRange = -180f..180f, onValueChange = { rotVal = it }
+                ) { targetClip?.let { viewModel.addOrUpdateKeyframe(it.id, KeyframeParam.ROTATION, rotVal, selectedCurve) } }
+                KeyframeParamRow(
+                    label = "Opacity", valueText = "${opacityVal.toInt()}%", value = opacityVal,
+                    valueRange = 0f..100f, onValueChange = { opacityVal = it }
+                ) { targetClip?.let { viewModel.addOrUpdateKeyframe(it.id, KeyframeParam.OPACITY, opacityVal, selectedCurve) } }
 
                 Spacer(modifier = Modifier.height(4.dp))
 
@@ -320,22 +338,25 @@ fun KeyframeEditorScreen(
             }
 
             val totalDur = targetClip?.durationMs?.coerceAtLeast(1000L) ?: 5000L
-            val transformOffsets = remember(targetClip) {
-                targetClip?.keyframes?.filter { it.param in listOf(KeyframeParam.POSITION_X, KeyframeParam.POSITION_Y, KeyframeParam.SCALE, KeyframeParam.ROTATION) }
-                    ?.map { (it.timeMs.toFloat() / totalDur).coerceIn(0.05f, 0.95f) }
-                    ?.ifEmpty { listOf(0.1f, 0.45f, 0.75f) } ?: listOf(0.1f, 0.45f, 0.75f)
-            }
-            val opacityOffsets = remember(targetClip) {
-                targetClip?.keyframes?.filter { it.param == KeyframeParam.OPACITY }
-                    ?.map { (it.timeMs.toFloat() / totalDur).coerceIn(0.05f, 0.95f) }
-                    ?.ifEmpty { listOf(0.72f) } ?: listOf(0.72f)
-            }
+            val transformKeyframes = targetClip?.keyframes?.filter {
+                it.param in listOf(KeyframeParam.POSITION_X, KeyframeParam.POSITION_Y, KeyframeParam.SCALE, KeyframeParam.ROTATION)
+            } ?: emptyList()
+            val opacityKeyframes = targetClip?.keyframes?.filter { it.param == KeyframeParam.OPACITY } ?: emptyList()
+            val transformOffsets = transformKeyframes.map { (it.timeMs.toFloat() / totalDur).coerceIn(0.01f, 0.99f) }
+            val opacityOffsets = opacityKeyframes.map { (it.timeMs.toFloat() / totalDur).coerceIn(0.01f, 0.99f) }
 
-            // Transform Track 1 (with diamond keyframes)
-            KeyframeTrackRow(label = "Transform", keyframeOffsets = transformOffsets)
-
-            // Opacity Track (with diamond keyframes)
-            KeyframeTrackRow(label = "Opacity", keyframeOffsets = opacityOffsets)
+            KeyframeTrackRow(
+                label = "Transform", keyframeOffsets = transformOffsets,
+                onKeyframeClick = { index ->
+                    targetClip?.let { viewModel.setPlayheadPosition(it.startTimeMs + transformKeyframes[index].timeMs) }
+                }
+            )
+            KeyframeTrackRow(
+                label = "Opacity", keyframeOffsets = opacityOffsets,
+                onKeyframeClick = { index ->
+                    targetClip?.let { viewModel.setPlayheadPosition(it.startTimeMs + opacityKeyframes[index].timeMs) }
+                }
+            )
         }
 
         // --- KEYFRAME CONTROLS BAR: [ < Prev Keyframe ] [ ◆+ Add Keyframe ] [ > Next Keyframe ] ---
@@ -440,34 +461,42 @@ fun KeyframeEditorScreen(
 @Composable
 fun KeyframeParamRow(
     label: String,
-    value: String,
+    valueText: String,
+    value: Float,
+    valueRange: ClosedFloatingPointRange<Float>,
+    onValueChange: (Float) -> Unit,
     onToggleDiamond: () -> Unit
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(label, color = VexTextPrimary, fontSize = 11.sp)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(value, color = VexTextSecondary, fontSize = 11.sp)
-            Spacer(modifier = Modifier.width(6.dp))
-            Box(
-                modifier = Modifier
-                    .size(16.dp)
-                    .clickable { onToggleDiamond() },
-                contentAlignment = Alignment.Center
-            ) {
-                Text("◆", color = VexAccentLight, fontSize = 13.sp)
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(label, color = VexTextPrimary, fontSize = 11.sp)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(valueText, color = VexTextSecondary, fontSize = 11.sp)
+                Spacer(modifier = Modifier.width(6.dp))
+                Box(
+                    modifier = Modifier.size(18.dp).clickable { onToggleDiamond() },
+                    contentAlignment = Alignment.Center
+                ) { Text("◆", color = VexAccentLight, fontSize = 13.sp) }
             }
         }
+        Slider(
+            value = value.coerceIn(valueRange),
+            onValueChange = onValueChange,
+            valueRange = valueRange,
+            modifier = Modifier.fillMaxWidth().height(22.dp)
+        )
     }
 }
 
 @Composable
 fun KeyframeTrackRow(
     label: String,
-    keyframeOffsets: List<Float>
+    keyframeOffsets: List<Float>,
+    onKeyframeClick: (Int) -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -487,11 +516,12 @@ fun KeyframeTrackRow(
             Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(VexAccent.copy(alpha = 0.5f)))
 
             // Diamonds on track
-            keyframeOffsets.forEach { fraction ->
+            keyframeOffsets.forEachIndexed { index, fraction ->
                 Box(
                     modifier = Modifier
                         .fillMaxWidth(fraction)
                         .wrapContentWidth(Alignment.End)
+                        .clickable { onKeyframeClick(index) }
                 ) {
                     Text("◆", color = VexAccentLight, fontSize = 12.sp)
                 }
