@@ -47,7 +47,11 @@ fun AudioStudioScreen(
     val playheadMs = viewModel.playheadPositionMs.collectAsState().value
     val isPlaying = viewModel.isPlaying.collectAsState().value
     val selectedClipId = viewModel.selectedClipId.collectAsState().value
-    val selectedAudioClip = remember(project, selectedClipId) { project?.clips?.firstOrNull { it.id == selectedClipId } }
+    val selectedAudioClip = remember(project, selectedClipId) {
+        project?.clips?.firstOrNull {
+            it.id == selectedClipId && it.trackType in setOf(TrackType.AUDIO_MUSIC, TrackType.AUDIO_VOICE, TrackType.AUDIO_SFX)
+        }
+    }
 
     var editVolume by remember(selectedAudioClip) { mutableFloatStateOf(selectedAudioClip?.volume ?: 1f) }
     var editFadeInMs by remember(selectedAudioClip) { mutableFloatStateOf(selectedAudioClip?.audioProperties?.fadeInMs?.toFloat() ?: 0f) }
