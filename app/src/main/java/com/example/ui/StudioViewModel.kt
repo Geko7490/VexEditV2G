@@ -506,7 +506,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         projectRepo.saveProject(updatedProject)
     }
 
-    fun deleteClip(clipId: String) {
+    fun deleteClip(clipId: String, ripple: Boolean = true) {
         val project = _currentProject.value ?: return
         val clip = project.clips.find { it.id == clipId } ?: return
         pushUndoState(project)
@@ -515,7 +515,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         // Existing gaps before/after that interval and all other tracks are preserved.
         val removedEnd = clip.startTimeMs + clip.durationMs
         val remaining = project.clips.filterNot { it.id == clipId }.map { other ->
-            if (other.trackId == clip.trackId && other.startTimeMs >= removedEnd) {
+            if (ripple && other.trackId == clip.trackId && other.startTimeMs >= removedEnd) {
                 other.copy(startTimeMs = (other.startTimeMs - clip.durationMs).coerceAtLeast(0L))
             } else other
         }
