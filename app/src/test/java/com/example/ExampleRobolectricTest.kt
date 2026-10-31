@@ -156,4 +156,69 @@ class ExampleRobolectricTest {
     assertEquals(30000L, vm.currentProject.value?.durationMs)
   }
 
+
+  @Test
+  fun `delete supports both preserving gaps and ripple behavior`() {
+    val application = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.StudioViewModel(application)
+    val before = com.example.data.MediaClip(
+      id = "before_delete", name = "Before", trackId = "track_video_1",
+      trackType = com.example.data.TrackType.VIDEO, startTimeMs = 0L, durationMs = 1000L
+    )
+    val target = com.example.data.MediaClip(
+      id = "delete_target", name = "Delete", trackId = "track_video_1",
+      trackType = com.example.data.TrackType.VIDEO, startTimeMs = 2000L, durationMs = 1000L
+    )
+    val after = com.example.data.MediaClip(
+      id = "after_delete", name = "After", trackId = "track_video_1",
+      trackType = com.example.data.TrackType.VIDEO, startTimeMs = 6000L, durationMs = 1000L
+    )
+    val project = com.example.data.Project(
+      id = "delete_gap_modes", title = "Delete Gap Modes",
+      clips = listOf(before, target, after), durationMs = 7000L
+    )
+
+    vm.projectRepo.saveProject(project)
+    vm.selectProject(project)
+    vm.deleteClip(target.id, ripple = false)
+    assertEquals(6000L, vm.currentProject.value?.clips?.first { it.id == after.id }?.startTimeMs)
+
+    val rippleProject = project.copy(id = "ripple_delete_modes")
+    vm.projectRepo.saveProject(rippleProject)
+    vm.selectProject(rippleProject)
+    vm.deleteClip(target.id, ripple = true)
+    assertEquals(5000L, vm.currentProject.value?.clips?.first { it.id == after.id }?.startTimeMs)
+  }
+
+  @Test
+  fun `reordering clips preserves existing timeline slots and gaps`() {
+    val application = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.StudioViewModel(application)
+    val clips = listOf(
+      com.example.data.MediaClip(
+        id = "slot_a", name = "A", trackId = "track_video_1",
+        trackType = com.example.data.TrackType.VIDEO, startTimeMs = 0L, durationMs = 1000L
+      ),
+      com.example.data.MediaClip(
+        id = "slot_b", name = "B", trackId = "track_video_1",
+        trackType = com.example.data.TrackType.VIDEO, startTimeMs = 4000L, durationMs = 1000L
+      ),
+      com.example.data.MediaClip(
+        id = "slot_c", name = "C", trackId = "track_video_1",
+        trackType = com.example.data.TrackType.VIDEO, startTimeMs = 9000L, durationMs = 1000L
+      )
+    )
+    val project = com.example.data.Project(
+      id = "reorder_gap_slots", title = "Reorder Gap Slots",
+      clips = clips, durationMs = 10000L
+    )
+    vm.projectRepo.saveProject(project)
+    vm.selectProject(project)
+    vm.reorderTrackClips("track_video_1", 0, 2)
+
+    val updated = vm.currentProject.value!!.clips.associateBy { it.id }
+    assertEquals(9000L, updated["slot_a"]?.startTimeMs)
+    assertEquals(0L, updated["slot_b"]?.startTimeMs)
+    assertEquals(4000L, updated["slot_c"]?.startTimeMs)
+  }
 }
