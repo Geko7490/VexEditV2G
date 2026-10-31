@@ -67,7 +67,7 @@ fun AudioStudioScreen(
     var activeToolDialog by remember { mutableStateOf<String?>(null) } // "fade", "eq", "reverb"
 
     if (activeToolDialog != null) {
-        val supportedEdit = activeToolDialog in setOf("volume", "fade", "eq", "reverb")
+        val supportedEdit = activeToolDialog == "volume" || activeToolDialog == "fade" || activeToolDialog == "eq" || activeToolDialog == "reverb"
         AlertDialog(
             onDismissRequest = { activeToolDialog = null },
             title = {
@@ -532,6 +532,7 @@ fun AudioMixerChannelColumn(
     onToggleMute: () -> Unit,
     onToggleSolo: () -> Unit
 ) {
+    var faderValue by remember(db) { mutableFloatStateOf(db.coerceIn(-12f, 6f)) }
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.width(88.dp).padding(horizontal = 3.dp)
@@ -545,14 +546,15 @@ fun AudioMixerChannelColumn(
             overflow = TextOverflow.Ellipsis
         )
         Text(
-            text = if (db > 0) "+${String.format(java.util.Locale.US, "%.1f", db)} dB" else "${String.format(java.util.Locale.US, "%.1f", db)} dB",
-            color = if (db > 0) VexAccentLight else VexTextSecondary,
+            text = if (faderValue > 0) "+${String.format(java.util.Locale.US, "%.1f", faderValue)} dB" else "${String.format(java.util.Locale.US, "%.1f", faderValue)} dB",
+            color = if (faderValue > 0) VexAccentLight else VexTextSecondary,
             fontSize = 9.sp,
             fontWeight = FontWeight.Bold
         )
         Slider(
-            value = db.coerceIn(-12f, 6f),
-            onValueChange = onDbChange,
+            value = faderValue,
+            onValueChange = { faderValue = it },
+            onValueChangeFinished = { onDbChange(faderValue) },
             valueRange = -12f..6f,
             modifier = Modifier.fillMaxWidth().height(28.dp)
         )
