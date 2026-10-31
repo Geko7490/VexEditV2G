@@ -46,6 +46,12 @@ fun AudioStudioScreen(
     val project = viewModel.currentProject.collectAsState().value
     val playheadMs = viewModel.playheadPositionMs.collectAsState().value
     val isPlaying = viewModel.isPlaying.collectAsState().value
+    val selectedClipId = viewModel.selectedClipId.collectAsState().value
+    val selectedAudioClip = remember(project, selectedClipId) { project?.clips?.firstOrNull { it.id == selectedClipId } }
+
+    var editVolume by remember(selectedAudioClip) { mutableFloatStateOf(selectedAudioClip?.volume ?: 1f) }
+    var editFadeInMs by remember(selectedAudioClip) { mutableFloatStateOf(selectedAudioClip?.audioProperties?.fadeInMs?.toFloat() ?: 0f) }
+    var editFadeOutMs by remember(selectedAudioClip) { mutableFloatStateOf(selectedAudioClip?.audioProperties?.fadeOutMs?.toFloat() ?: 0f) }
 
     val audioTracks = remember(project) {
         project?.tracks?.filter {
@@ -53,6 +59,79 @@ fun AudioStudioScreen(
         } ?: emptyList()
     }
     var activeToolDialog by remember { mutableStateOf<String?>(null) } // "fade", "eq", "reverb"
+
+    if (activeToolDialog != null) {
+        val supportedEdit = activeToolDialog == "volume" || activeToolDialog == "fade"
+        AlertDialog(
+            onDismissRequest = { activeToolDialog = null },
+            title = {
+                Text(
+                    when (activeToolDialog) {
+                        "volume" -> "Clip Volume"
+                        "fade" -> "Fade In / Fade Out"
+                        "eq" -> "Equalizer"
+                        "noise_gate" -> "Noise Gate"
+                        "compressor" -> "Compressor"
+                        "reverb" -> "Reverb"
+                        "delay" -> "Delay"
+                        "limiter" -> "Limiter"
+                        else -> "Audio Tool"
+                    },
+                    color = VexTextPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                if (selectedAudioClip == null) {
+                    Text("Select an audio clip on the timeline first.", color = VexTextSecondary)
+                } else if (activeToolDialog == "volume") {
+                    Column {
+                        Text("Volume: ${(editVolume * 100).toInt()}%", color = VexTextPrimary)
+                        Slider(value = editVolume, onValueChange = { editVolume = it }, valueRange = 0f..2f)
+                    }
+                } else if (activeToolDialog == "fade") {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Fade In: ${(editFadeInMs / 1000f).toString().take(4)} s", color = VexTextPrimary)
+                        Slider(value = editFadeInMs, onValueChange = { editFadeInMs = it }, valueRange = 0f..5000f)
+                        Text("Fade Out: ${(editFadeOutMs / 1000f).toString().take(4)} s", color = VexTextPrimary)
+                        Slider(value = editFadeOutMs, onValueChange = { editFadeOutMs = it }, valueRange = 0f..5000f)
+                        Text("Fade envelopes are applied during timeline preview. Export audio processing is a separate pending engine task.", color = VexTextSecondary, fontSize = 11.sp)
+                    }
+                } else {
+                    Text(
+                        "This control is visible in the interface, but its audio DSP processor is not connected yet. It will not be falsely marked as applied. The processor and export support are scheduled for the Audio DSP phase.",
+                        color = VexTextSecondary
+                    )
+                }
+            },
+            confirmButton = {
+                if (supportedEdit && selectedAudioClip != null) {
+                    Button(onClick = {
+                        if (activeToolDialog == "volume") {
+                            viewModel.setClipVolume(selectedAudioClip.id, editVolume)
+                        } else {
+                            viewModel.updateAudioProperties(
+                                selectedAudioClip.id,
+                                selectedAudioClip.audioProperties.copy(
+                                    fadeInMs = editFadeInMs.toLong(),
+                                    fadeOutMs = editFadeOutMs.toLong()
+                                )
+                            )
+                        }
+                        activeToolDialog = null
+                    }, colors = ButtonDefaults.buttonColors(containerColor = VexAccent)) {
+                        Text("Apply", color = Color.White)
+                    }
+                } else {
+                    TextButton(onClick = { activeToolDialog = null }) { Text("Close") }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { activeToolDialog = null }) { Text("Cancel", color = VexTextSecondary) }
+            },
+            containerColor = VexPanel
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -266,12 +345,12 @@ fun AudioStudioScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceAround
             ) {
-                AudioToolTile(icon = Icons.Default.ContentCut, label = "Trim") { viewModel.splitClipAtPlayhead() }
+                AudioToolTile(icon = Icons.Default.ContentCut, label = "Split") { viewModel.splitClipAtPlayhead() }
                 AudioToolTile(icon = Icons.Default.Tune, label = "Fade") { activeToolDialog = "fade" }
-                AudioToolTile(icon = Icons.Default.VolumeUp, label = "Volume") { /* Adjust volume */ }
+                AudioToolTile(icon = Icons.Default.VolumeUp, label = "Volume") { activeToolDialog = "volume" }
                 AudioToolTile(icon = Icons.Default.Equalizer, label = "EQ") { activeToolDialog = "eq" }
                 AudioToolTile(icon = Icons.Default.AutoAwesome, label = "Effects") { onNavigate(Screen.EFFECTS_LAB) }
-                AudioToolTile(icon = Icons.Default.SensorsOff, label = "Noise Gate") { /* Toggle noise gate */ }
+                AudioToolTile(icon = Icons.Default.SensorsOff, label = "Noise Gate") { activeToolDialog = "noise_gate" }
             }
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -281,10 +360,10 @@ fun AudioStudioScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceAround
             ) {
-                AudioToolTile(icon = Icons.Default.Speed, label = "Compressor") {}
+                AudioToolTile(icon = Icons.Default.Speed, label = "Compressor") { activeToolDialog = "compressor" }
                 AudioToolTile(icon = Icons.Default.GraphicEq, label = "Reverb") { activeToolDialog = "reverb" }
-                AudioToolTile(icon = Icons.Default.AvTimer, label = "Delay") {}
-                AudioToolTile(icon = Icons.Default.Leaderboard, label = "Limiter") {}
+                AudioToolTile(icon = Icons.Default.AvTimer, label = "Delay") { activeToolDialog = "delay" }
+                AudioToolTile(icon = Icons.Default.Leaderboard, label = "Limiter") { activeToolDialog = "limiter" }
             }
 
             Spacer(modifier = Modifier.height(10.dp))
