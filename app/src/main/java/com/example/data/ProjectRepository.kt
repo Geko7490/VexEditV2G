@@ -2,6 +2,12 @@ package com.example.data
 
 import android.content.Context
 import androidx.room.Room
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -14,8 +20,10 @@ class ProjectRepository(private val context: Context) {
 
     private val projectsFile = File(context.filesDir, "vex_projects.json")
     private val autoSaveFile = File(context.filesDir, "vex_autosave.json")
-    private val database = Room.databaseBuilder(context.applicationContext, VexProjectDatabase::class.java, "vex_projects.db").allowMainThreadQueries().build()
+    private val database = Room.databaseBuilder(context.applicationContext, VexProjectDatabase::class.java, "vex_projects.db").build()
     private val projectDao = database.projectDao()
+    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val persistenceMutex = Mutex()
 
     private val _projects = MutableStateFlow<List<Project>>(emptyList())
     val projects: StateFlow<List<Project>> = _projects.asStateFlow()
@@ -25,34 +33,45 @@ class ProjectRepository(private val context: Context) {
     }
 
     private fun loadProjects() {
-        try {
-            val roomProjects = projectDao.getAll()
-            val loaded = if (roomProjects.isNotEmpty()) {
-                roomProjects.mapNotNull { row ->
-                    try { deserializeProject(JSONObject(row.payload)) } catch (_: Exception) { null }
-                }
-            } else if (projectsFile.exists()) {
-                // One-time migration from the previous JSON-only project store.
-                deserializeProjects(projectsFile.readText()).also { legacy ->
-                    if (legacy.isNotEmpty()) persistProjects(legacy)
-                }
-            } else emptyList()
+        ioScope.launch {
+            persistenceMutex.withLock {
+                try {
+                    val roomProjects = projectDao.getAll()
+                    val loaded = if (roomProjects.isNotEmpty()) {
+                        roomProjects.mapNotNull { row ->
+                            try { deserializeProject(JSONObject(row.payload)) } catch (_: Exception) { null }
+                        }
+                    } else if (projectsFile.exists()) {
+                        // One-time migration from the previous JSON-only project store.
+                        deserializeProjects(projectsFile.readText())
+                    } else emptyList()
 
-            val cleanList = loaded.filterNot {
-                it.id in listOf("proj_midnight", "proj_drill", "proj_summer", "proj_cinematic")
+                    val cleanList = loaded.filterNot {
+                        it.id in listOf("proj_midnight", "proj_drill", "proj_summer", "proj_cinematic")
+                    }
+                    _projects.value = cleanList
+                    if (roomProjects.isEmpty() || cleanList.size != loaded.size) {
+                        writePersistedProjects(cleanList)
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    _projects.value = try {
+                        if (projectsFile.exists()) deserializeProjects(projectsFile.readText()) else emptyList()
+                    } catch (_: Exception) { emptyList() }
+                }
             }
-            _projects.value = cleanList
-            if (cleanList.size != loaded.size) persistProjects(cleanList)
-        } catch (e: Exception) {
-            e.printStackTrace()
-            // Keep projects recoverable if Room cannot read its store.
-            _projects.value = try {
-                if (projectsFile.exists()) deserializeProjects(projectsFile.readText()) else emptyList()
-            } catch (_: Exception) { emptyList() }
         }
     }
 
     private fun persistProjects(list: List<Project>) {
+        ioScope.launch {
+            persistenceMutex.withLock {
+                writePersistedProjects(list)
+            }
+        }
+    }
+
+    private fun writePersistedProjects(list: List<Project>) {
         try {
             val rows = list.map { project ->
                 ProjectEntity(
@@ -66,7 +85,7 @@ class ProjectRepository(private val context: Context) {
                 projectDao.deleteAll()
                 if (rows.isNotEmpty()) projectDao.upsertAll(rows)
             }
-            // Retain a JSON snapshot for recovery and migration from older app versions.
+            // Keep a recovery snapshot while Room remains the primary store.
             projectsFile.writeText(serializeProjects(list))
         } catch (e: Exception) {
             e.printStackTrace()
@@ -96,11 +115,12 @@ class ProjectRepository(private val context: Context) {
         _projects.value = current
         persistProjects(current)
 
-        // Also save as auto-save
-        try {
-            autoSaveFile.writeText(serializeProject(updated).toString())
-        } catch (e: Exception) {
-            // Ignore
+        // Persist auto-save off the main thread with the same ordered I/O queue.
+        ioScope.launch {
+            persistenceMutex.withLock {
+                try { autoSaveFile.writeText(serializeProject(updated).toString()) }
+                catch (e: Exception) { e.printStackTrace() }
+            }
         }
     }
 
