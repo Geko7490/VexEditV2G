@@ -381,4 +381,35 @@ class ExampleRobolectricTest {
     assertEquals(AspectRatio.RATIO_9_16, vm.currentProject.value?.aspectRatio)
   }
 
+  @Test
+  fun `timeline clip can move to an empty time range and undo restores its position`() {
+    val application = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.StudioViewModel(application)
+    val clip = com.example.data.MediaClip(
+      id = "free_move_clip",
+      name = "Movable Clip",
+      trackId = "track_video_1",
+      trackType = com.example.data.TrackType.VIDEO,
+      startTimeMs = 1000L,
+      durationMs = 3000L
+    )
+    val project = com.example.data.Project(
+      id = "free_move_project",
+      title = "Free Move",
+      clips = listOf(clip),
+      durationMs = 4000L
+    )
+    vm.projectRepo.saveProject(project)
+    vm.selectProject(project)
+
+    vm.moveClip(clip.id, 8500L)
+    assertEquals(8500L, vm.currentProject.value!!.clips.first { it.id == clip.id }.startTimeMs)
+    assertEquals(11500L, vm.currentProject.value!!.durationMs)
+
+    vm.undo()
+    assertEquals(1000L, vm.currentProject.value!!.clips.first { it.id == clip.id }.startTimeMs)
+    assertEquals(4000L, vm.currentProject.value!!.durationMs)
+  }
+
+
 }
