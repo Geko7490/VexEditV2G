@@ -613,6 +613,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     fun updateClipTransform(clipId: String, transform: ClipTransform) {
         val project = _currentProject.value ?: return
         val clip = project.clips.find { it.id == clipId } ?: return
+        pushUndoState(project)
         val updated = clip.copy(transform = transform)
         val updatedClips = project.clips.map { if (it.id == clipId) updated else it }
         val updatedProject = project.copy(clips = updatedClips)
