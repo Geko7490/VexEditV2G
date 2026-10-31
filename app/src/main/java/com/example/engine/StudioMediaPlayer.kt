@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.media.AudioAttributes
 import android.media.MediaMetadataRetriever
 import android.media.MediaPlayer
+import android.media.audiofx.BassBoost
 import android.media.audiofx.Equalizer
 import android.media.audiofx.PresetReverb
 import android.util.Log
@@ -63,6 +64,7 @@ class StudioMediaPlayer(context: Context) {
     private val audioPlayers = mutableMapOf<String, MediaPlayer>()
     private val audioPaths = mutableMapOf<String, String>()
     private val equalizers = mutableMapOf<String, Equalizer>()
+    private val bassBoosts = mutableMapOf<String, BassBoost>()
     private val reverbs = mutableMapOf<String, PresetReverb>()
 
     private val _playerState = MutableStateFlow(PlayerState())
@@ -319,27 +321,32 @@ class StudioMediaPlayer(context: Context) {
     private fun applyPreviewEffects(id: String, sessionId: Int, eqPreset: String, reverbLevel: Float) {
         try {
             val equalizer = equalizers[id] ?: Equalizer(0, sessionId).also { equalizers[id] = it }
-            if (!equalizer.hasControl()) return
-            val requested = eqPreset.trim().lowercase()
-            var matched: Short? = null
-            for (index in 0 until equalizer.numberOfPresets.toInt()) {
-                val presetIndex = index.toShort()
-                if (equalizer.getPresetName(presetIndex).toString().lowercase() == requested) {
-                    matched = presetIndex
-                    break
+            if (equalizer.hasControl()) {
+                val requested = eqPreset.trim()
+                var matched: Short? = null
+                for (index in 0 until equalizer.numberOfPresets.toInt()) {
+                    val presetIndex = index.toShort()
+                    if (equalizer.getPresetName(presetIndex).toString().equals(requested, ignoreCase = true)) {
+                        matched = presetIndex
+                        break
+                    }
                 }
+                if (matched != null) equalizer.usePreset(matched)
+                equalizer.enabled = matched != null && !eqPreset.equals("Flat", ignoreCase = true) &&
+                    !eqPreset.equals("Bass Boost", ignoreCase = true)
             }
-            if (matched != null) {
-                equalizer.usePreset(matched)
-            } else {
-                val flatIndex = (0 until equalizer.numberOfPresets.toInt())
-                    .map { it.toShort() }
-                    .firstOrNull { equalizer.getPresetName(it).toString().equals("Flat", ignoreCase = true) }
-                if (flatIndex != null) equalizer.usePreset(flatIndex)
-            }
-            equalizer.enabled = !eqPreset.equals("Flat", ignoreCase = true)
         } catch (e: Exception) {
             Log.w(TAG, "Equalizer preview unavailable for $id", e)
+        }
+
+        try {
+            val bassBoost = bassBoosts[id] ?: BassBoost(0, sessionId).also { bassBoosts[id] = it }
+            if (bassBoost.hasControl()) {
+                bassBoost.setStrength(if (eqPreset.equals("Bass Boost", ignoreCase = true)) 800.toShort() else 0.toShort())
+                bassBoost.enabled = eqPreset.equals("Bass Boost", ignoreCase = true)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Bass boost preview unavailable for $id", e)
         }
 
         try {
@@ -362,6 +369,7 @@ class StudioMediaPlayer(context: Context) {
 
     private fun releasePreviewEffects(id: String) {
         try { equalizers.remove(id)?.release() } catch (_: Exception) {}
+        try { bassBoosts.remove(id)?.release() } catch (_: Exception) {}
         try { reverbs.remove(id)?.release() } catch (_: Exception) {}
     }
 
