@@ -8,7 +8,7 @@ import java.io.File
 import com.example.engine.ExportConfig
 import com.example.engine.ExportEngine
 import com.example.engine.ExportResult
-import com.example.engine.StudioMediaPlayer
+import com.example.engine.StudioMediaPlayer\nimport com.example.engine.AudioTrackPlayback
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -166,7 +166,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             else null)
 
         if (activeVideoClip != null && activeVideoClip.filePath.isNotEmpty()) {
-            val offsetMs = (posMs - activeVideoClip.startTimeMs + activeVideoClip.sourceStartMs).coerceAtLeast(0L)
+            val offsetMs = ((posMs - activeVideoClip.startTimeMs) * activeVideoClip.speed).toLong().plus(activeVideoClip.sourceStartMs).coerceAtLeast(0L)
             val isMuted = activeVideoClip.audioProperties.isMuted
             val vol = (activeVideoClip.volume * activeVideoClip.audioProperties.volume).coerceIn(0f, 1f)
             player.bindVideoClip(
@@ -180,23 +180,30 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             player.stopVideo()
         }
 
-        // Background audio track clip sync
-        val activeAudioClip = project.clips.filter {
-            it.trackType == TrackType.AUDIO_MUSIC || it.trackType == TrackType.AUDIO_SFX
-        }.find { posMs >= it.startTimeMs && posMs < (it.startTimeMs + it.durationMs) }
-
-        if (activeAudioClip != null && activeAudioClip.filePath.isNotEmpty()) {
-            val audioOffset = (posMs - activeAudioClip.startTimeMs + activeAudioClip.sourceStartMs).coerceAtLeast(0L)
-            player.bindAudioTrack(
-                audioPath = activeAudioClip.filePath,
-                startOffsetMs = audioOffset,
-                shouldPlay = _isPlaying.value,
-                volume = activeAudioClip.volume,
-                muted = activeAudioClip.audioProperties.isMuted
-            )
-        } else {
-            player.stopAudio()
+        // Synchronize every active audio clip, including music, voice and SFX.
+        val activeAudioClips = project.clips.filter { clip ->
+            clip.trackType in listOf(TrackType.AUDIO_MUSIC, TrackType.AUDIO_VOICE, TrackType.AUDIO_SFX) &&
+                posMs >= clip.startTimeMs && posMs < (clip.startTimeMs + clip.durationMs)
         }
+        val tracksById = project.tracks.associateBy { it.id }
+        val anySolo = project.tracks.any { it.isSolo } || activeAudioClips.any { it.audioProperties.isSolo }
+        val audioPlayback = activeAudioClips.map { clip ->
+            val track = tracksById[clip.trackId]
+            val isSoloed = track?.isSolo == true || clip.audioProperties.isSolo
+            val muted = clip.audioProperties.isMuted || track?.isMuted == true || (anySolo && !isSoloed)
+            val trackGain = Math.pow(10.0, ((track?.faderDb ?: 0f) / 20f).toDouble()).toFloat()
+            val offset = ((posMs - clip.startTimeMs) * clip.speed).toLong() + clip.sourceStartMs
+            AudioTrackPlayback(
+                id = clip.id,
+                filePath = clip.filePath,
+                startOffsetMs = offset.coerceAtLeast(0L),
+                volume = (clip.volume * trackGain).coerceIn(0f, 1f),
+                muted = muted,
+                speed = clip.speed,
+                shouldPlay = _isPlaying.value
+            )
+        }
+        player.bindAudioTracks(audioPlayback);
     }
 
     fun togglePlayback() {
