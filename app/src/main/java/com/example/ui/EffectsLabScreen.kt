@@ -21,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -45,6 +46,39 @@ private data class EffectPresetEntry(
     val opacity: Float,
     val blend: Float
 )
+
+private fun effectPreviewFilter(type: EffectType, intensity: Float): ColorFilter? {
+    val amount = intensity.coerceIn(0f, 2f)
+    val values = when (type) {
+        EffectType.BRIGHTNESS -> {
+            val offset = (amount - 1f) * 48f
+            floatArrayOf(1f,0f,0f,0f,offset, 0f,1f,0f,0f,offset, 0f,0f,1f,0f,offset, 0f,0f,0f,1f,0f)
+        }
+        EffectType.CONTRAST -> {
+            val contrast = 1f + amount * 0.35f
+            val offset = 128f * (1f - contrast)
+            floatArrayOf(contrast,0f,0f,0f,offset, 0f,contrast,0f,0f,offset, 0f,0f,contrast,0f,offset, 0f,0f,0f,1f,0f)
+        }
+        EffectType.WARMTH -> floatArrayOf(
+            1f+.08f*amount,0f,0f,0f,8f*amount, 0f,1f+.025f*amount,0f,0f,2f*amount,
+            0f,0f,1f-.10f*amount,0f,0f, 0f,0f,0f,1f,0f
+        )
+        EffectType.COOL_CYAN -> floatArrayOf(
+            1f-.10f*amount,0f,0f,0f,0f, 0f,1f+.025f*amount,0f,0f,2f*amount,
+            0f,0f,1f+.10f*amount,0f,8f*amount, 0f,0f,0f,1f,0f
+        )
+        EffectType.VINTAGE -> floatArrayOf(
+            1f,0f,0f,0f,8f*amount, 0f,.94f,0f,0f,4f*amount,
+            0f,0f,.82f,0f,0f, 0f,0f,0f,1f,0f
+        )
+        EffectType.VIOLET_GLOW -> floatArrayOf(
+            1f,0f,0f,0f,5f*amount, 0f,.92f,0f,0f,0f,
+            0f,0f,1.08f,0f,8f*amount, 0f,0f,0f,1f,0f
+        )
+        else -> return null
+    }
+    return ColorFilter.colorMatrix(ColorMatrix(values))
+}
 
 fun EffectsLabScreen(
     viewModel: StudioViewModel,
@@ -105,10 +139,15 @@ fun EffectsLabScreen(
     // Before | After toggle
     var isBeforeMode by remember { mutableStateOf(false) }
 
-    val categories = listOf("Cinematic", "Color", "Blur", "Glitch", "Light", "Texture")
+    val categories = listOf("Cinematic", "Color", "Light")
 
-    val effectsList = EffectType.values().map { it to it.title }
+    // Only expose effects that currently have a real preview and export implementation.
+    val effectsList = listOf(
+        EffectType.VIOLET_GLOW, EffectType.BRIGHTNESS, EffectType.CONTRAST,
+        EffectType.WARMTH, EffectType.COOL_CYAN, EffectType.VINTAGE
+    ).map { it to it.title }
     val filteredEffects = effectsList.filter { it.first.category.name.equals(selectedCategory, ignoreCase = true) }
+    val previewColorFilter = if (isBeforeMode) null else effectPreviewFilter(selectedEffectType, intensity)
 
     LaunchedEffect(targetClip, selectedEffectType) {
         val current = targetClip?.effects?.firstOrNull { it.type == selectedEffectType }
@@ -212,7 +251,6 @@ fun EffectsLabScreen(
                 .background(Color.Black),
             contentAlignment = Alignment.Center
         ) {
-            val showGlow = !isBeforeMode && selectedEffectType == EffectType.VIOLET_GLOW
             val clipFile = targetClip?.let { java.io.File(it.thumbnailPath.ifEmpty { it.filePath }) }
 
             if (clipFile != null && clipFile.exists()) {
@@ -224,7 +262,7 @@ fun EffectsLabScreen(
                         .aspectRatio(16f / 9f)
                         .clip(RoundedCornerShape(4.dp)),
                     contentScale = ContentScale.Crop,
-                    colorFilter = if (showGlow) ColorFilter.tint(VexAccent.copy(alpha = 0.35f * opacity)) else null
+                    colorFilter = previewColorFilter
                 )
             } else {
                 Box(
