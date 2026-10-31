@@ -441,7 +441,7 @@ fun KeyframeEditorScreen(
             Button(
                 onClick = {
                     targetClip?.let {
-                        viewModel.addOrUpdateKeyframes(
+                        val addedKeyframes = viewModel.addOrUpdateKeyframes(
                             it.id,
                             mapOf(
                                 KeyframeParam.POSITION_X to posX,
@@ -452,6 +452,10 @@ fun KeyframeEditorScreen(
                             ),
                             selectedCurve
                         )
+                        addedKeyframes.firstOrNull()?.let { keyframe ->
+                            selectedKeyframeId = keyframe.id
+                            selectedCurve = keyframe.curve
+                        }
                     }
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = VexPanelElevated),
