@@ -302,34 +302,23 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     fun reorderTrackClips(trackId: String, fromIndex: Int, toIndex: Int) {
         val project = _currentProject.value ?: return
-        val trackClips = project.clips.filter { it.trackId == trackId }.sortedBy { it.startTimeMs }.toMutableList()
-        if (fromIndex !in trackClips.indices || toIndex !in trackClips.indices || fromIndex == toIndex) return
+        val ordered = project.clips.filter { it.trackId == trackId }.sortedBy { it.startTimeMs }
+        if (fromIndex !in ordered.indices || toIndex !in ordered.indices || fromIndex == toIndex) return
 
+        // Reorder clip identities while preserving the track's existing timeline slots.
+        // This keeps intentional gaps and overlaps instead of silently packing the track.
         pushUndoState(project)
-        val item = trackClips.removeAt(fromIndex)
-        trackClips.add(toIndex, item)
-
-        var currentStart = 0L
-        val updatedTrackClips = trackClips.map { clip ->
-            val updated = clip.copy(startTimeMs = currentStart)
-            currentStart += clip.durationMs
-            updated
-        }
-
-        val otherClips = project.clips.filter { it.trackId != trackId }
-        val allClips = otherClips + updatedTrackClips
+        val reordered = ordered.toMutableList()
+        val moved = reordered.removeAt(fromIndex)
+        reordered.add(toIndex, moved)
+        val slots = ordered.map { it.startTimeMs }
+        val replacements = reordered.mapIndexed { index, clip -> clip.copy(startTimeMs = slots[index]) }
+        val byId = replacements.associateBy { it.id }
+        val allClips = project.clips.map { byId[it.id] ?: it }
         val maxEnd = allClips.maxOfOrNull { it.startTimeMs + it.durationMs } ?: 0L
-
-        val firstVisual = allClips.firstOrNull { it.trackType == TrackType.VIDEO }
-        val thumb = firstVisual?.let { it.thumbnailPath.ifEmpty { it.filePath } } ?: project.thumbnailPath
-
-        val updatedProject = project.copy(
-            clips = allClips,
-            durationMs = maxEnd,
-            thumbnailPath = thumb
-        )
+        val updatedProject = project.copy(clips = allClips, durationMs = maxEnd)
         _currentProject.value = updatedProject
-        _selectedClipId.value = item.id
+        _selectedClipId.value = moved.id
         projectRepo.saveProject(updatedProject)
     }
 
@@ -410,51 +399,26 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     fun trimClipStart(clipId: String, deltaMs: Long) {
         val project = _currentProject.value ?: return
         val clip = project.clips.find { it.id == clipId } ?: return
-
-        val resolvedSourceDuration = if (clip.sourceDurationMs > 0L) {
-            clip.sourceDurationMs
-        } else {
-            val dur = mediaManager.queryFileDurationMs(clip.filePath, clip.uriString)
-            if (dur > 0L) dur else (clip.sourceStartMs + clip.durationMs)
+        val sourceDuration = if (clip.sourceDurationMs > 0L) clip.sourceDurationMs else {
+            mediaManager.queryFileDurationMs(clip.filePath, clip.uriString).takeIf { it > 0L }
+                ?: (clip.sourceStartMs + (clip.durationMs * clip.speed).toLong())
         }
-
-        val effectiveSpeed = if (clip.speed > 0f) clip.speed else 1.0f
-        val maxShorten = clip.durationMs - 300L
-        // deltaMs < 0 extends back towards sourceStartMs = 0
-        val minDelta = -(clip.sourceStartMs / effectiveSpeed).toLong()
-        val clampedDelta = deltaMs.coerceIn(minDelta, maxShorten)
-        if (clampedDelta == 0L) return
+        val speed = clip.speed.takeIf { it > 0f } ?: 1f
+        val minDelta = maxOf(-(clip.sourceStartMs / speed).toLong(), -clip.startTimeMs)
+        val maxDelta = clip.durationMs - 300L
+        val delta = deltaMs.coerceIn(minDelta, maxDelta)
+        if (delta == 0L) return
 
         pushUndoState(project)
-
-        val newDuration = (clip.durationMs - clampedDelta).coerceAtLeast(300L)
-        val sourceDelta = (clampedDelta * effectiveSpeed).toLong()
-        val newSourceStart = (clip.sourceStartMs + sourceDelta).coerceIn(0L, (resolvedSourceDuration - 300L).coerceAtLeast(0L))
-
-        val trackClips = project.clips.filter { it.trackId == clip.trackId }.sortedBy { it.startTimeMs }
-        val clipIndex = trackClips.indexOfFirst { it.id == clipId }
-        if (clipIndex < 0) return
-
+        val sourceDelta = (delta * speed).toLong()
         val updatedClip = clip.copy(
-            durationMs = newDuration,
-            sourceStartMs = newSourceStart,
-            sourceDurationMs = resolvedSourceDuration
+            startTimeMs = (clip.startTimeMs + delta).coerceAtLeast(0L),
+            sourceStartMs = (clip.sourceStartMs + sourceDelta).coerceAtLeast(0L),
+            durationMs = (clip.durationMs - delta).coerceAtLeast(300L),
+            sourceDurationMs = sourceDuration
         )
-
-        val newTrackClips = trackClips.toMutableList()
-        newTrackClips[clipIndex] = updatedClip
-
-        var currentStart = 0L
-        val finalTrackClips = newTrackClips.map { c ->
-            val updated = c.copy(startTimeMs = currentStart)
-            currentStart += c.durationMs
-            updated
-        }
-
-        val otherClips = project.clips.filter { it.trackId != clip.trackId }
-        val allClips = otherClips + finalTrackClips
+        val allClips = project.clips.map { if (it.id == clipId) updatedClip else it }
         val maxEnd = allClips.maxOfOrNull { it.startTimeMs + it.durationMs } ?: 0L
-
         val updatedProject = project.copy(clips = allClips, durationMs = maxEnd)
         _currentProject.value = updatedProject
         projectRepo.saveProject(updatedProject)
@@ -464,49 +428,21 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     fun trimClipEnd(clipId: String, deltaMs: Long) {
         val project = _currentProject.value ?: return
         val clip = project.clips.find { it.id == clipId } ?: return
-
-        val resolvedSourceDuration = if (clip.sourceDurationMs > 0L) {
-            clip.sourceDurationMs
-        } else {
-            val dur = mediaManager.queryFileDurationMs(clip.filePath, clip.uriString)
-            if (dur > 0L) dur else (clip.sourceStartMs + clip.durationMs)
+        val sourceDuration = if (clip.sourceDurationMs > 0L) clip.sourceDurationMs else {
+            mediaManager.queryFileDurationMs(clip.filePath, clip.uriString).takeIf { it > 0L }
+                ?: (clip.sourceStartMs + (clip.durationMs * clip.speed).toLong())
         }
-
-        val effectiveSpeed = if (clip.speed > 0f) clip.speed else 1.0f
-        val maxAllowedDuration = if (clip.mediaType == MediaType.VIDEO) {
-            val maxAvailableSourceMs = (resolvedSourceDuration - clip.sourceStartMs).coerceAtLeast(300L)
-            (maxAvailableSourceMs / effectiveSpeed).toLong().coerceAtLeast(300L)
-        } else {
-            120_000L
-        }
-
-        val targetDuration = (clip.durationMs + deltaMs).coerceIn(300L, maxAllowedDuration)
+        val speed = clip.speed.takeIf { it > 0f } ?: 1f
+        val maxDuration = if (clip.mediaType == MediaType.VIDEO) {
+            ((sourceDuration - clip.sourceStartMs).coerceAtLeast(300L) / speed).toLong().coerceAtLeast(300L)
+        } else 120_000L
+        val targetDuration = (clip.durationMs + deltaMs).coerceIn(300L, maxDuration)
         if (targetDuration == clip.durationMs) return
 
         pushUndoState(project)
-
-        val updatedClip = clip.copy(
-            durationMs = targetDuration,
-            sourceDurationMs = resolvedSourceDuration
-        )
-        val trackClips = project.clips.filter { it.trackId == clip.trackId }.sortedBy { it.startTimeMs }
-        val clipIndex = trackClips.indexOfFirst { it.id == clipId }
-        if (clipIndex < 0) return
-
-        val newTrackClips = trackClips.toMutableList()
-        newTrackClips[clipIndex] = updatedClip
-
-        var currentStart = 0L
-        val finalTrackClips = newTrackClips.map { c ->
-            val updated = c.copy(startTimeMs = currentStart)
-            currentStart += c.durationMs
-            updated
-        }
-
-        val otherClips = project.clips.filter { it.trackId != clip.trackId }
-        val allClips = otherClips + finalTrackClips
+        val updatedClip = clip.copy(durationMs = targetDuration, sourceDurationMs = sourceDuration)
+        val allClips = project.clips.map { if (it.id == clipId) updatedClip else it }
         val maxEnd = allClips.maxOfOrNull { it.startTimeMs + it.durationMs } ?: 0L
-
         val updatedProject = project.copy(clips = allClips, durationMs = maxEnd)
         _currentProject.value = updatedProject
         projectRepo.saveProject(updatedProject)
@@ -538,31 +474,22 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         val clip = project.clips.find { it.id == clipId } ?: return
         pushUndoState(project)
 
+        // Insert the duplicate directly after the source clip. Later clips on the same
+        // track move by exactly one clip duration; unrelated tracks remain untouched.
+        val insertAt = clip.startTimeMs + clip.durationMs
         val copy = clip.copy(
             id = UUID.randomUUID().toString(),
-            name = "${clip.name} (Copy)"
+            name = "${clip.name} (Copy)",
+            startTimeMs = insertAt,
+            isSelected = false
         )
-
-        val trackClips = project.clips.filter { it.trackId == clip.trackId }.sortedBy { it.startTimeMs }.toMutableList()
-        val clipIndex = trackClips.indexOfFirst { it.id == clipId }
-        if (clipIndex >= 0) {
-            trackClips.add(clipIndex + 1, copy)
-        } else {
-            trackClips.add(copy)
-        }
-
-        var currentStart = 0L
-        val updatedTrackClips = trackClips.map { c ->
-            val updated = c.copy(startTimeMs = currentStart)
-            currentStart += c.durationMs
-            updated
-        }
-
-        val otherClips = project.clips.filter { it.trackId != clip.trackId }
-        val allClips = otherClips + updatedTrackClips
-        val maxEnd = allClips.maxOfOrNull { it.startTimeMs + it.durationMs } ?: 0L
-
-        val updatedProject = project.copy(clips = allClips, durationMs = maxEnd)
+        val updatedClips = project.clips.map { existing ->
+            if (existing.trackId == clip.trackId && existing.id != clip.id && existing.startTimeMs >= insertAt) {
+                existing.copy(startTimeMs = existing.startTimeMs + clip.durationMs)
+            } else existing
+        } + copy
+        val maxEnd = updatedClips.maxOfOrNull { it.startTimeMs + it.durationMs } ?: 0L
+        val updatedProject = project.copy(clips = updatedClips, durationMs = maxEnd)
         _currentProject.value = updatedProject
         _selectedClipId.value = copy.id
         projectRepo.saveProject(updatedProject)
@@ -570,37 +497,30 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     fun deleteClip(clipId: String) {
         val project = _currentProject.value ?: return
-        val clipToDelete = project.clips.find { it.id == clipId } ?: return
+        val clip = project.clips.find { it.id == clipId } ?: return
         pushUndoState(project)
 
-        val remainingClips = project.clips.filterNot { it.id == clipId }
-        val trackId = clipToDelete.trackId
-        val trackClips = remainingClips.filter { it.trackId == trackId }.sortedBy { it.startTimeMs }
-        var currentStart = 0L
-        val updatedTrackClips = trackClips.map { c ->
-            val updated = c.copy(startTimeMs = currentStart)
-            currentStart += c.durationMs
-            updated
+        // Ripple-delete only the removed clip's occupied interval on its own track.
+        // Existing gaps before/after that interval and all other tracks are preserved.
+        val removedEnd = clip.startTimeMs + clip.durationMs
+        val remaining = project.clips.filterNot { it.id == clipId }.map { other ->
+            if (other.trackId == clip.trackId && other.startTimeMs >= removedEnd) {
+                other.copy(startTimeMs = (other.startTimeMs - clip.durationMs).coerceAtLeast(0L))
+            } else other
         }
-
-        val otherClips = remainingClips.filter { it.trackId != trackId }
-        val allClips = otherClips + updatedTrackClips
-        val maxEnd = allClips.maxOfOrNull { it.startTimeMs + it.durationMs } ?: 0L
-
-        val firstVisual = allClips.firstOrNull { it.trackType == TrackType.VIDEO }
-        val thumb = firstVisual?.let { it.thumbnailPath.ifEmpty { it.filePath } }
-
+        val maxEnd = remaining.maxOfOrNull { it.startTimeMs + it.durationMs } ?: 0L
+        val firstVisual = remaining.firstOrNull { it.trackType == TrackType.VIDEO }
         val updatedProject = project.copy(
-            clips = allClips,
+            clips = remaining,
             durationMs = maxEnd,
-            thumbnailPath = thumb
+            thumbnailPath = firstVisual?.let { it.thumbnailPath.ifEmpty { it.filePath } }
         )
         _currentProject.value = updatedProject
-        _selectedClipId.value = updatedTrackClips.firstOrNull()?.id ?: allClips.firstOrNull()?.id
-        if (_playheadPositionMs.value > maxEnd) {
-            _playheadPositionMs.value = maxEnd
-        }
+        _selectedClipId.value = remaining.firstOrNull { it.trackId == clip.trackId }?.id
+            ?: remaining.firstOrNull()?.id
+        _playheadPositionMs.value = _playheadPositionMs.value.coerceAtMost(maxEnd)
         projectRepo.saveProject(updatedProject)
+        syncPlayerToPlayhead(_playheadPositionMs.value)
     }
 
     fun stepPlayhead(deltaMs: Long) {
