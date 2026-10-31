@@ -233,10 +233,12 @@ fun EffectsLabScreen(
             )
 
             TextButton(onClick = {
+                // Reset the selected effect both in the editor controls and on the target clip.
                 intensity = 1.0f
                 radius = 0.0f
                 opacity = 1.0f
                 blend = 0.0f
+                targetClip?.let { viewModel.removeEffect(it.id, selectedEffectType) }
             }) {
                 Text(Strings.get("reset", lang), color = VexTextSecondary, fontSize = 13.sp)
             }
