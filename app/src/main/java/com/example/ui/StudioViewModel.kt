@@ -157,6 +157,15 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         selectProject(project)
     }
 
+    fun setProjectAspectRatio(ratio: AspectRatio) {
+        val project = _currentProject.value ?: return
+        if (project.aspectRatio == ratio) return
+        pushUndoState(project)
+        val updated = project.copy(aspectRatio = ratio)
+        _currentProject.value = updated
+        projectRepo.saveProject(updated)
+    }
+
     fun selectClip(clipId: String?) {
         _selectedClipId.value = clipId
     }
