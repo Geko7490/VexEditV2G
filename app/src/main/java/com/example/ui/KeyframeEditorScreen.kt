@@ -416,7 +416,22 @@ fun KeyframeEditorScreen(
             }
 
             TextButton(
-                onClick = { targetClip?.let { viewModel.jumpToPreviousKeyframe(it.id) } }
+                onClick = {
+                    targetClip?.let { clip ->
+                        val currentRelative = playheadMs - clip.startTimeMs
+                        val previous = clip.keyframes
+                            .filter { it.timeMs < currentRelative - 40L }
+                            .maxByOrNull { it.timeMs }
+                        if (previous != null) {
+                            selectedKeyframeId = previous.id
+                            selectedCurve = previous.curve
+                            viewModel.setPlayheadPosition(clip.startTimeMs + previous.timeMs)
+                        } else {
+                            selectedKeyframeId = null
+                            viewModel.jumpToPreviousKeyframe(clip.id)
+                        }
+                    }
+                }
             ) {
                 Icon(Icons.Default.ChevronLeft, contentDescription = null, tint = VexTextPrimary, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(4.dp))
@@ -450,7 +465,22 @@ fun KeyframeEditorScreen(
             }
 
             TextButton(
-                onClick = { targetClip?.let { viewModel.jumpToNextKeyframe(it.id) } }
+                onClick = {
+                    targetClip?.let { clip ->
+                        val currentRelative = playheadMs - clip.startTimeMs
+                        val next = clip.keyframes
+                            .filter { it.timeMs > currentRelative + 40L }
+                            .minByOrNull { it.timeMs }
+                        if (next != null) {
+                            selectedKeyframeId = next.id
+                            selectedCurve = next.curve
+                            viewModel.setPlayheadPosition(clip.startTimeMs + next.timeMs)
+                        } else {
+                            selectedKeyframeId = null
+                            viewModel.jumpToNextKeyframe(clip.id)
+                        }
+                    }
+                }
             ) {
                 Text(Strings.get("next_keyframe", lang), color = VexTextPrimary, fontSize = 11.sp)
                 Spacer(modifier = Modifier.width(4.dp))
