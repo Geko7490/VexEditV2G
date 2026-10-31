@@ -194,42 +194,32 @@ fun KeyframeEditorScreen(
                 if (activeBottomTab == "Transform" || activeBottomTab == "Motion") {
                 KeyframeParamRow(
                     label = "Position X", valueText = String.format(java.util.Locale.US, "%.1f", posX),
-                    value = posX, valueRange = -100f..100f, onValueChange = { value ->
-                        posX = value
-                        targetClip?.let { clip -> selectedKeyframe?.takeIf { it.param == KeyframeParam.POSITION_X }?.let { viewModel.updateKeyframe(clip.id, it.id, value = value) } }
-                    }
+                    value = posX, valueRange = -100f..100f, onValueChange = { posX = it },
+                    onValueChangeFinished = { targetClip?.let { clip -> selectedKeyframe?.takeIf { it.param == KeyframeParam.POSITION_X }?.let { viewModel.updateKeyframe(clip.id, it.id, value = posX) } } }
                 ) { targetClip?.let { viewModel.addOrUpdateKeyframe(it.id, KeyframeParam.POSITION_X, posX, selectedCurve) } }
                 KeyframeParamRow(
                     label = "Position Y", valueText = String.format(java.util.Locale.US, "%.1f", posY),
-                    value = posY, valueRange = -100f..100f, onValueChange = { value ->
-                        posY = value
-                        targetClip?.let { clip -> selectedKeyframe?.takeIf { it.param == KeyframeParam.POSITION_Y }?.let { viewModel.updateKeyframe(clip.id, it.id, value = value) } }
-                    }
+                    value = posY, valueRange = -100f..100f, onValueChange = { posY = it },
+                    onValueChangeFinished = { targetClip?.let { clip -> selectedKeyframe?.takeIf { it.param == KeyframeParam.POSITION_Y }?.let { viewModel.updateKeyframe(clip.id, it.id, value = posY) } } }
                 ) { targetClip?.let { viewModel.addOrUpdateKeyframe(it.id, KeyframeParam.POSITION_Y, posY, selectedCurve) } }
                 if (activeBottomTab == "Transform") {
                 KeyframeParamRow(
                     label = "Scale", valueText = "${scaleVal.toInt()}%", value = scaleVal,
-                    valueRange = 10f..300f, onValueChange = { value ->
-                        scaleVal = value
-                        targetClip?.let { clip -> selectedKeyframe?.takeIf { it.param == KeyframeParam.SCALE }?.let { viewModel.updateKeyframe(clip.id, it.id, value = value) } }
-                    }
+                    valueRange = 10f..300f, onValueChange = { scaleVal = it },
+                    onValueChangeFinished = { targetClip?.let { clip -> selectedKeyframe?.takeIf { it.param == KeyframeParam.SCALE }?.let { viewModel.updateKeyframe(clip.id, it.id, value = scaleVal) } } }
                 ) { targetClip?.let { viewModel.addOrUpdateKeyframe(it.id, KeyframeParam.SCALE, scaleVal, selectedCurve) } }
                 }
                 KeyframeParamRow(
                     label = "Rotation", valueText = "${rotVal.toInt()}°", value = rotVal,
-                    valueRange = -180f..180f, onValueChange = { value ->
-                        rotVal = value
-                        targetClip?.let { clip -> selectedKeyframe?.takeIf { it.param == KeyframeParam.ROTATION }?.let { viewModel.updateKeyframe(clip.id, it.id, value = value) } }
-                    }
+                    valueRange = -180f..180f, onValueChange = { rotVal = it },
+                    onValueChangeFinished = { targetClip?.let { clip -> selectedKeyframe?.takeIf { it.param == KeyframeParam.ROTATION }?.let { viewModel.updateKeyframe(clip.id, it.id, value = rotVal) } } }
                 ) { targetClip?.let { viewModel.addOrUpdateKeyframe(it.id, KeyframeParam.ROTATION, rotVal, selectedCurve) } }
                 }
                 if (activeBottomTab == "Opacity") {
                 KeyframeParamRow(
                     label = "Opacity", valueText = "${opacityVal.toInt()}%", value = opacityVal,
-                    valueRange = 0f..100f, onValueChange = { value ->
-                        opacityVal = value
-                        targetClip?.let { clip -> selectedKeyframe?.takeIf { it.param == KeyframeParam.OPACITY }?.let { viewModel.updateKeyframe(clip.id, it.id, value = value) } }
-                    }
+                    valueRange = 0f..100f, onValueChange = { opacityVal = it },
+                    onValueChangeFinished = { targetClip?.let { clip -> selectedKeyframe?.takeIf { it.param == KeyframeParam.OPACITY }?.let { viewModel.updateKeyframe(clip.id, it.id, value = opacityVal) } } }
                 ) { targetClip?.let { viewModel.addOrUpdateKeyframe(it.id, KeyframeParam.OPACITY, opacityVal, selectedCurve) } }
                 }
 
@@ -520,6 +510,7 @@ fun KeyframeParamRow(
     value: Float,
     valueRange: ClosedFloatingPointRange<Float>,
     onValueChange: (Float) -> Unit,
+    onValueChangeFinished: () -> Unit = {},
     onToggleDiamond: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -541,6 +532,7 @@ fun KeyframeParamRow(
         Slider(
             value = value.coerceIn(valueRange),
             onValueChange = onValueChange,
+            onValueChangeFinished = onValueChangeFinished,
             valueRange = valueRange,
             modifier = Modifier.fillMaxWidth().height(22.dp)
         )
