@@ -41,7 +41,7 @@ data class PlayerState(
 /**
  * Media3-backed preview player. The public methods intentionally retain the old
  * StudioMediaPlayer API so the editor UI/ViewModel can migrate without a rewrite.
- * Audio track playback remains isolated until the timeline mixer is upgraded.
+ * Active music, voice and SFX clips are synchronized as independent preview players.
  */
 class StudioMediaPlayer(context: Context) {
     companion object { private const val TAG = "StudioMediaPlayer" }
