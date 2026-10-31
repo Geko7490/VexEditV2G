@@ -20,7 +20,17 @@ import java.io.File
 
 enum class PlaybackStatus { IDLE, LOADING, READY, PLAYING, PAUSED, ERROR }
 
-data class AudioTrackPlayback(\n    val id: String,\n    val filePath: String,\n    val startOffsetMs: Long,\n    val volume: Float,\n    val muted: Boolean,\n    val speed: Float = 1f,\n    val shouldPlay: Boolean\n)\n\ndata class PlayerState(
+data class AudioTrackPlayback(
+    val id: String,
+    val filePath: String,
+    val startOffsetMs: Long,
+    val volume: Float,
+    val muted: Boolean,
+    val speed: Float = 1f,
+    val shouldPlay: Boolean
+)
+
+data class PlayerState(
     val status: PlaybackStatus = PlaybackStatus.IDLE,
     val filePath: String = "",
     val errorMessage: String? = null,
@@ -46,9 +56,8 @@ class StudioMediaPlayer(context: Context) {
     private var pendingSeekMs: Long = 0L
     private var isPrepared = false
 
-    private var audioPlayer: MediaPlayer? = null
-    private var currentAudioPath: String? = null
-    private var isAudioPrepared = false
+    private val audioPlayers = mutableMapOf<String, MediaPlayer>()
+    private val audioPaths = mutableMapOf<String, String>()
 
     private val _playerState = MutableStateFlow(PlayerState())
     val playerState: StateFlow<PlayerState> = _playerState.asStateFlow()
@@ -304,8 +313,6 @@ class StudioMediaPlayer(context: Context) {
 
     fun release() {
         stopAudio()
-        try { audioPlayer?.release() } catch (_: Exception) {}
-        audioPlayer = null
         try { videoPlayer.release() } catch (_: Exception) {}
     }
 }
