@@ -46,11 +46,16 @@ class ProjectRepository(private val context: Context) {
                         deserializeProjects(projectsFile.readText())
                     } else emptyList()
 
-                    val cleanList = loaded.filterNot {
+                    // Preserve projects created while the asynchronous initial load was running.
+                    val inMemory = _projects.value
+                    val inMemoryIds = inMemory.map { it.id }.toSet()
+                    val merged = (loaded.filterNot { it.id in inMemoryIds } + inMemory)
+                        .sortedByDescending { it.lastEditedTimestamp }
+                    val cleanList = merged.filterNot {
                         it.id in listOf("proj_midnight", "proj_drill", "proj_summer", "proj_cinematic")
                     }
                     _projects.value = cleanList
-                    if (roomProjects.isEmpty() || cleanList.size != loaded.size) {
+                    if (roomProjects.isEmpty() || cleanList != loaded) {
                         writePersistedProjects(cleanList)
                     }
                 } catch (e: Exception) {
