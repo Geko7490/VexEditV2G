@@ -66,6 +66,7 @@ class StudioMediaPlayer(context: Context) {
     private val equalizers = mutableMapOf<String, Equalizer>()
     private val bassBoosts = mutableMapOf<String, BassBoost>()
     private val reverbs = mutableMapOf<String, PresetReverb>()
+    private val previewEffectSettings = mutableMapOf<String, Pair<String, Float>>()
 
     private val _playerState = MutableStateFlow(PlayerState())
     val playerState: StateFlow<PlayerState> = _playerState.asStateFlow()
@@ -320,6 +321,11 @@ class StudioMediaPlayer(context: Context) {
     }
 
     private fun applyPreviewEffects(id: String, sessionId: Int, eqPreset: String, reverbLevel: Float) {
+        val safeReverbLevel = reverbLevel.coerceIn(0f, 1f)
+        val requestedSettings = eqPreset to safeReverbLevel
+        if (previewEffectSettings[id] == requestedSettings) return
+        previewEffectSettings[id] = requestedSettings
+
         try {
             val equalizer = equalizers[id] ?: Equalizer(0, sessionId).also { equalizers[id] = it }
             if (equalizer.hasControl()) {
@@ -351,7 +357,7 @@ class StudioMediaPlayer(context: Context) {
         }
 
         try {
-            val level = reverbLevel.coerceIn(0f, 1f)
+            val level = safeReverbLevel
             val reverb = reverbs[id] ?: PresetReverb(0, sessionId).also { reverbs[id] = it }
             if (level <= 0.01f) {
                 reverb.enabled = false
@@ -372,6 +378,7 @@ class StudioMediaPlayer(context: Context) {
         try { equalizers.remove(id)?.release() } catch (_: Exception) {}
         try { bassBoosts.remove(id)?.release() } catch (_: Exception) {}
         try { reverbs.remove(id)?.release() } catch (_: Exception) {}
+        previewEffectSettings.remove(id)
     }
 
     fun stopAudio() {
