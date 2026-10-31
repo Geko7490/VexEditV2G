@@ -601,6 +601,8 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         val project = _currentProject.value ?: return
         val clip = project.clips.find { it.id == clipId } ?: return
         val safeVolume = volume.coerceIn(0f, 1f)
+        if (clip.volume == safeVolume && clip.audioProperties.volume == safeVolume) return
+        pushUndoState(project)
         val updated = clip.copy(
             volume = safeVolume,
             audioProperties = clip.audioProperties.copy(volume = safeVolume)
@@ -820,8 +822,17 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     fun updateAudioProperties(clipId: String, props: AudioProperties) {
         val project = _currentProject.value ?: return
         val clip = project.clips.find { it.id == clipId } ?: return
+        val safeProps = props.copy(
+            volume = props.volume.coerceIn(0f, 1f),
+            fadeInMs = props.fadeInMs.coerceAtLeast(0L),
+            fadeOutMs = props.fadeOutMs.coerceAtLeast(0L),
+            faderDb = props.faderDb.coerceIn(-60f, 12f),
+            reverbLevel = props.reverbLevel.coerceIn(0f, 1f),
+            delayLevel = props.delayLevel.coerceIn(0f, 1f)
+        )
+        if (clip.audioProperties == safeProps && clip.volume == safeProps.volume) return
         pushUndoState(project)
-        val updated = clip.copy(audioProperties = props, volume = props.volume)
+        val updated = clip.copy(audioProperties = safeProps, volume = safeProps.volume)
         val updatedClips = project.clips.map { if (it.id == clipId) updated else it }
         val updatedProject = project.copy(clips = updatedClips)
         _currentProject.value = updatedProject
@@ -831,8 +842,12 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     fun setTrackFader(trackId: String, db: Float) {
         val project = _currentProject.value ?: return
+        val track = project.tracks.find { it.id == trackId } ?: return
+        val safeDb = db.coerceIn(-12f, 6f)
+        if (track.faderDb == safeDb) return
+        pushUndoState(project)
         val updatedTracks = project.tracks.map {
-            if (it.id == trackId) it.copy(faderDb = db) else it
+            if (it.id == trackId) it.copy(faderDb = safeDb) else it
         }
         val updatedProject = project.copy(tracks = updatedTracks)
         _currentProject.value = updatedProject
@@ -842,6 +857,8 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     fun toggleTrackMute(trackId: String) {
         val project = _currentProject.value ?: return
+        if (project.tracks.none { it.id == trackId }) return
+        pushUndoState(project)
         val updatedTracks = project.tracks.map {
             if (it.id == trackId) it.copy(isMuted = !it.isMuted) else it
         }
@@ -853,6 +870,8 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     fun toggleTrackSolo(trackId: String) {
         val project = _currentProject.value ?: return
+        if (project.tracks.none { it.id == trackId }) return
+        pushUndoState(project)
         val updatedTracks = project.tracks.map {
             if (it.id == trackId) it.copy(isSolo = !it.isSolo) else it
         }
