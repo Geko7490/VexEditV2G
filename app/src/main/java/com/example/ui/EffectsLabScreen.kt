@@ -23,6 +23,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -32,13 +33,59 @@ import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.data.*
 import com.example.ui.theme.*
+import org.json.JSONArray
+import org.json.JSONObject
 
 @Composable
+private data class EffectPresetEntry(
+    val name: String,
+    val type: EffectType,
+    val intensity: Float,
+    val radius: Float,
+    val opacity: Float,
+    val blend: Float
+)
+
 fun EffectsLabScreen(
     viewModel: StudioViewModel,
     onNavigate: (Screen) -> Unit
 ) {
     val lang = viewModel.settings.collectAsState().value.language
+    val context = LocalContext.current
+    val presetPreferences = remember(context) { context.getSharedPreferences("vex_effect_presets", 0) }
+    val savedPresets = remember { mutableStateListOf<EffectPresetEntry>() }
+    var showPresetsDialog by remember { mutableStateOf(false) }
+    var presetName by remember { mutableStateOf("") }
+
+    LaunchedEffect(presetPreferences) {
+        savedPresets.clear()
+        val stored = runCatching { JSONArray(presetPreferences.getString("presets", "[]") ?: "[]") }.getOrNull()
+        if (stored != null) {
+            for (index in 0 until stored.length()) {
+                val item = stored.optJSONObject(index) ?: continue
+                val type = runCatching { EffectType.valueOf(item.optString("type")) }.getOrNull() ?: continue
+                savedPresets.add(EffectPresetEntry(
+                    name = item.optString("name", "Preset"), type = type,
+                    intensity = item.optDouble("intensity", 1.0).toFloat(),
+                    radius = item.optDouble("radius", 0.0).toFloat(),
+                    opacity = item.optDouble("opacity", 1.0).toFloat(),
+                    blend = item.optDouble("blend", 0.0).toFloat()
+                ))
+            }
+        }
+    }
+
+    fun persistPresets() {
+        val json = JSONArray()
+        savedPresets.forEach { preset ->
+            json.put(JSONObject().apply {
+                put("name", preset.name); put("type", preset.type.name)
+                put("intensity", preset.intensity.toDouble()); put("radius", preset.radius.toDouble())
+                put("opacity", preset.opacity.toDouble()); put("blend", preset.blend.toDouble())
+            })
+        }
+        presetPreferences.edit().putString("presets", json.toString()).apply()
+    }
     val project = viewModel.currentProject.collectAsState().value
     val selectedClipId = viewModel.selectedClipId.collectAsState().value
 
@@ -58,18 +105,63 @@ fun EffectsLabScreen(
     // Before | After toggle
     var isBeforeMode by remember { mutableStateOf(false) }
 
-    val categories = listOf("Cinematic", "Color", "Blur", "Glitch", "Light", "Distortion", "Audio", "Texture")
+    val categories = listOf("Cinematic", "Color", "Blur", "Glitch", "Light", "Texture")
 
-    val effectsList = listOf(
-        Pair(EffectType.VIOLET_GLOW, "Violet Glow"),
-        Pair(EffectType.FILM_GRAIN, "Film Grain"),
-        Pair(EffectType.RGB_SPLIT, "RGB Split"),
-        Pair(EffectType.MOTION_BLUR, "Motion Blur"),
-        Pair(EffectType.CHROMATIC_ABERRATION, "Chromatic Aberration"),
-        Pair(EffectType.VHS, "VHS"),
-        Pair(EffectType.VINTAGE, "Vintage"),
-        Pair(EffectType.CONTRAST, "Contrast Boost")
-    )
+    val effectsList = EffectType.values().map { it to it.title }
+    val filteredEffects = effectsList.filter { it.first.category.name.equals(selectedCategory, ignoreCase = true) }
+
+    LaunchedEffect(targetClip, selectedEffectType) {
+        val current = targetClip?.effects?.firstOrNull { it.type == selectedEffectType }
+        if (current != null) {
+            intensity = current.intensity; radius = current.radius
+            opacity = current.opacity; blend = current.blend
+        } else {
+            intensity = 1f; radius = 0f; opacity = 1f; blend = 0f
+        }
+    }
+
+    if (showPresetsDialog) {
+        AlertDialog(
+            onDismissRequest = { showPresetsDialog = false },
+            title = { Text("Effect Presets", color = VexTextPrimary, fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = presetName, onValueChange = { presetName = it },
+                        label = { Text("Preset name") }, singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = VexTextPrimary, unfocusedTextColor = VexTextPrimary)
+                    )
+                    Button(
+                        onClick = {
+                            val name = presetName.trim()
+                            if (name.isNotEmpty()) {
+                                savedPresets.add(EffectPresetEntry(name, selectedEffectType, intensity, radius, opacity, blend))
+                                persistPresets(); presetName = ""
+                            }
+                        }, enabled = presetName.isNotBlank(),
+                        colors = ButtonDefaults.buttonColors(containerColor = VexAccent)
+                    ) { Text("Save Current Preset", color = Color.White) }
+                    if (savedPresets.isEmpty()) Text("No saved presets yet.", color = VexTextSecondary, fontSize = 12.sp)
+                    savedPresets.forEachIndexed { index, preset ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            TextButton(onClick = {
+                                selectedEffectType = preset.type; intensity = preset.intensity
+                                radius = preset.radius; opacity = preset.opacity; blend = preset.blend
+                                showPresetsDialog = false
+                            }, modifier = Modifier.weight(1f)) {
+                                Text("${preset.name} · ${preset.type.title}", color = VexTextPrimary)
+                            }
+                            IconButton(onClick = { savedPresets.removeAt(index); persistPresets() }) {
+                                Icon(Icons.Default.DeleteOutline, contentDescription = "Delete preset", tint = VexTextSecondary)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showPresetsDialog = false }) { Text(Strings.get("close", lang)) } },
+            containerColor = VexPanel
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -107,7 +199,7 @@ fun EffectsLabScreen(
                 Text(Strings.get("reset", lang), color = VexTextSecondary, fontSize = 13.sp)
             }
 
-            TextButton(onClick = { /* Save preset */ }) {
+            TextButton(onClick = { showPresetsDialog = true }) {
                 Text(Strings.get("save_preset", lang), color = VexTextPrimary, fontSize = 13.sp)
             }
         }
@@ -226,7 +318,10 @@ fun EffectsLabScreen(
 
             // Effect Cards Grid (2 rows x 4 items)
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                effectsList.chunked(4).forEach { rowEffects ->
+                if (filteredEffects.isEmpty()) {
+                    Text("No effects in this category yet.", color = VexTextSecondary, fontSize = 12.sp)
+                }
+                filteredEffects.chunked(4).forEach { rowEffects ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
