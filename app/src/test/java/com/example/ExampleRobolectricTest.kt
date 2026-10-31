@@ -221,4 +221,69 @@ class ExampleRobolectricTest {
     assertEquals(0L, updated["slot_b"]?.startTimeMs)
     assertEquals(4000L, updated["slot_c"]?.startTimeMs)
   }
+  @Test
+  fun `keyframe navigation jumps to actual keyframe timestamps and add stores all transform values`() {
+    val application = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.StudioViewModel(application)
+    val clip = com.example.data.MediaClip(
+      id = "keyframe_navigation_clip",
+      name = "Keyframe Test",
+      trackId = "track_video_1",
+      trackType = com.example.data.TrackType.VIDEO,
+      startTimeMs = 2000L,
+      durationMs = 10000L,
+      keyframes = listOf(
+        com.example.data.Keyframe(timeMs = 1000L, param = com.example.data.KeyframeParam.POSITION_X, value = 10f),
+        com.example.data.Keyframe(timeMs = 4000L, param = com.example.data.KeyframeParam.POSITION_Y, value = 20f),
+        com.example.data.Keyframe(timeMs = 6000L, param = com.example.data.KeyframeParam.OPACITY, value = 80f)
+      )
+    )
+    val project = com.example.data.Project(
+      id = "keyframe_navigation_project",
+      title = "Keyframe Navigation",
+      clips = listOf(clip),
+      durationMs = 12000L
+    )
+    vm.projectRepo.saveProject(project)
+    vm.selectProject(project)
+
+    vm.setPlayheadPosition(6500L)
+    vm.jumpToPreviousKeyframe(clip.id)
+    assertEquals(6000L, vm.playheadPositionMs.value)
+
+    vm.jumpToNextKeyframe(clip.id)
+    assertEquals(8000L, vm.playheadPositionMs.value)
+
+    vm.setPlayheadPosition(5000L)
+    vm.addOrUpdateKeyframes(
+      clip.id,
+      mapOf(
+        com.example.data.KeyframeParam.POSITION_X to 5f,
+        com.example.data.KeyframeParam.POSITION_Y to 6f,
+        com.example.data.KeyframeParam.SCALE to 120f,
+        com.example.data.KeyframeParam.ROTATION to 15f,
+        com.example.data.KeyframeParam.OPACITY to 90f
+      ),
+      com.example.data.InterpolationType.LINEAR
+    )
+    val saved = vm.currentProject.value!!.clips.first { it.id == clip.id }
+    com.example.data.KeyframeParam.values().forEach { param ->
+      assertNotNull(saved.keyframes.firstOrNull { it.param == param && it.timeMs == 3000L })
+    }
+  }
+
+  @Test
+  fun `project aspect ratio change is undoable`() {
+    val application = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.StudioViewModel(application)
+    val project = com.example.data.Project(id = "aspect_undo_project", title = "Aspect Undo")
+    vm.projectRepo.saveProject(project)
+    vm.selectProject(project)
+
+    vm.setProjectAspectRatio(AspectRatio.RATIO_16_9)
+    assertEquals(AspectRatio.RATIO_16_9, vm.currentProject.value?.aspectRatio)
+    vm.undo()
+    assertEquals(AspectRatio.RATIO_9_16, vm.currentProject.value?.aspectRatio)
+  }
+
 }
