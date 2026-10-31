@@ -228,7 +228,8 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                 speed = clip.speed,
                 shouldPlay = _isPlaying.value,
                 eqPreset = clip.audioProperties.eqPreset,
-                reverbLevel = clip.audioProperties.reverbLevel
+                reverbLevel = clip.audioProperties.reverbLevel,
+                uriString = clip.uriString
             )
         }
         player.bindAudioTracks(audioPlayback);
