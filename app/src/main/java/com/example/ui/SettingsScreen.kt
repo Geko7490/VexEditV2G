@@ -34,6 +34,8 @@ fun SettingsScreen(
     var showClearCacheDialog by remember { mutableStateOf(false) }
     var cacheClearedToast by remember { mutableStateOf(false) }
     var recoverySuccessToast by remember { mutableStateOf(false) }
+    var recoveryFailedToast by remember { mutableStateOf(false) }
+    var cacheFailedToast by remember { mutableStateOf(false) }
 
     if (showClearCacheDialog) {
         AlertDialog(
@@ -43,9 +45,10 @@ fun SettingsScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        viewModel.clearCache()
+                        val cleared = viewModel.clearCache()
                         showClearCacheDialog = false
-                        cacheClearedToast = true
+                        cacheClearedToast = cleared
+                        cacheFailedToast = !cleared
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = VexAccent)
                 ) {
@@ -108,6 +111,18 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(Strings.get("cache_cleared", lang), color = VexTextPrimary, fontSize = 13.sp)
                     }
+                }
+            }
+
+            if (cacheFailedToast) {
+                Card(colors = CardDefaults.cardColors(containerColor = VexPanelElevated), modifier = Modifier.fillMaxWidth().border(1.dp, VexMeterRed, RoundedCornerShape(8.dp))) {
+                    Text("Cache could not be cleared while rendering is active or files are locked.", color = VexTextPrimary, fontSize = 13.sp, modifier = Modifier.padding(12.dp))
+                }
+            }
+
+            if (recoveryFailedToast) {
+                Card(colors = CardDefaults.cardColors(containerColor = VexPanelElevated), modifier = Modifier.fillMaxWidth().border(1.dp, VexMeterRed, RoundedCornerShape(8.dp))) {
+                    Text("No valid auto-save snapshot was found.", color = VexTextPrimary, fontSize = 13.sp, modifier = Modifier.padding(12.dp))
                 }
             }
 
@@ -266,8 +281,9 @@ fun SettingsScreen(
 
                     Button(
                         onClick = {
-                            viewModel.restoreAutoSave()
-                            recoverySuccessToast = true
+                            val restored = viewModel.restoreAutoSave()
+                            recoverySuccessToast = restored
+                            recoveryFailedToast = !restored
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = VexPanelElevated),
                         shape = RoundedCornerShape(6.dp),
