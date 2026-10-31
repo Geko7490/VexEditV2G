@@ -47,14 +47,11 @@ fun AudioStudioScreen(
     val playheadMs = viewModel.playheadPositionMs.collectAsState().value
     val isPlaying = viewModel.isPlaying.collectAsState().value
 
-    // Track fader levels for the 6 mixer channels
-    val faderLevels = remember {
-        mutableStateListOf(2.0f, -5.0f, -2.0f, -2.0f, -3.0f, -5.0f)
+    val audioTracks = remember(project) {
+        project?.tracks?.filter {
+            it.type == TrackType.AUDIO_MUSIC || it.type == TrackType.AUDIO_VOICE || it.type == TrackType.AUDIO_SFX
+        } ?: emptyList()
     }
-    val muteStates = remember { mutableStateListOf(false, false, false, false, false, false) }
-    val soloStates = remember { mutableStateListOf(false, false, false, false, false, false) }
-
-    var selectedAudioTrack by remember { mutableStateOf(0) } // 0: MUSIC, 1: VOICE, 2: SOUND FX
     var activeToolDialog by remember { mutableStateOf<String?>(null) } // "fade", "eq", "reverb"
 
     Column(
@@ -226,7 +223,7 @@ fun AudioStudioScreen(
             }
         }
 
-        // --- 6-CHANNEL MIXER FADERS (Matching Screenshot 6) ---
+        // --- PROJECT-LINKED AUDIO MIXER ---
         Surface(
             color = VexPanel,
             modifier = Modifier
@@ -238,16 +235,20 @@ fun AudioStudioScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                for (ch in 0 until 6) {
-                    AudioMixerChannelColumn(
-                        channelIndex = ch,
-                        db = faderLevels[ch],
-                        isMuted = muteStates[ch],
-                        isSolo = soloStates[ch],
-                        onDbChange = { faderLevels[ch] = it },
-                        onToggleMute = { muteStates[ch] = !muteStates[ch] },
-                        onToggleSolo = { soloStates[ch] = !soloStates[ch] }
-                    )
+                if (audioTracks.isEmpty()) {
+                    Text("Add an audio track to use the mixer.", color = VexTextSecondary, fontSize = 11.sp)
+                } else {
+                    audioTracks.forEach { track ->
+                        AudioMixerChannelColumn(
+                            channelLabel = track.title,
+                            db = track.faderDb,
+                            isMuted = track.isMuted,
+                            isSolo = track.isSolo,
+                            onDbChange = { viewModel.setTrackFader(track.id, it) },
+                            onToggleMute = { viewModel.toggleTrackMute(track.id) },
+                            onToggleSolo = { viewModel.toggleTrackSolo(track.id) }
+                        )
+                    }
                 }
             }
         }
@@ -403,7 +404,7 @@ fun AudioTimelineTrackRow(
 
 @Composable
 fun AudioMixerChannelColumn(
-    channelIndex: Int,
+    channelLabel: String,
     db: Float,
     isMuted: Boolean,
     isSolo: Boolean,
@@ -413,100 +414,41 @@ fun AudioMixerChannelColumn(
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.width(52.dp)
+        modifier = Modifier.width(88.dp).padding(horizontal = 3.dp)
     ) {
         Text(
-            text = if (db > 0) "+${db.toInt()} dB" else "${db.toInt()} dB",
-            color = if (db > 0) VexAccentLight else VexTextSecondary,
+            text = channelLabel,
+            color = VexTextPrimary,
             fontSize = 10.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            text = if (db > 0) "+${String.format(java.util.Locale.US, "%.1f", db)} dB" else "${String.format(java.util.Locale.US, "%.1f", db)} dB",
+            color = if (db > 0) VexAccentLight else VexTextSecondary,
+            fontSize = 9.sp,
             fontWeight = FontWeight.Bold
         )
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        // Fader slider + VU Meter side-by-side
-        Row(
-            modifier = Modifier.height(75.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Slider thumb simulation
+        Slider(
+            value = db.coerceIn(-12f, 6f),
+            onValueChange = onDbChange,
+            valueRange = -12f..6f,
+            modifier = Modifier.fillMaxWidth().height(28.dp)
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
             Box(
-                modifier = Modifier
-                    .width(18.dp)
-                    .fillMaxHeight()
-                    .background(VexPanelElevated, RoundedCornerShape(3.dp))
-                    .border(0.5.dp, VexBorder, RoundedCornerShape(3.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                // Vertical slot line
-                Box(
-                    modifier = Modifier
-                        .width(2.dp)
-                        .fillMaxHeight()
-                        .background(Color.Black)
-                )
-                // Fader knob in purple
-                val normalizedY = ((6f - db) / 18f).coerceIn(0f, 1f)
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(14.dp)
-                        .offset(y = ((normalizedY - 0.5f) * 50).dp)
-                        .background(VexAccent, RoundedCornerShape(2.dp))
-                )
-            }
-
-            Spacer(modifier = Modifier.width(4.dp))
-
-            // VU Meter LED strip
-            Column(
-                modifier = Modifier
-                    .width(4.dp)
-                    .fillMaxHeight(),
-                verticalArrangement = Arrangement.SpaceBetween
-            ) {
-                val levels = 8
-                for (l in 0 until levels) {
-                    val ledColor = when {
-                        l < 2 -> VexMeterRed
-                        l < 4 -> VexMeterYellow
-                        else -> VexMeterGreen
-                    }
-                    val isActive = l >= (levels - ((db + 12f) / 18f * levels).toInt())
-                    Box(
-                        modifier = Modifier
-                            .size(4.dp)
-                            .background(if (isActive) ledColor else VexPanelElevated)
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(6.dp))
-
-        // Mute / Solo buttons
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            Box(
-                modifier = Modifier
-                    .size(20.dp)
-                    .clip(RoundedCornerShape(3.dp))
+                modifier = Modifier.size(22.dp).clip(RoundedCornerShape(3.dp))
                     .background(if (isMuted) VexMeterRed else VexPanelElevated)
                     .clickable { onToggleMute() },
                 contentAlignment = Alignment.Center
-            ) {
-                Text("M", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-            }
-
+            ) { Text("M", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold) }
             Box(
-                modifier = Modifier
-                    .size(20.dp)
-                    .clip(RoundedCornerShape(3.dp))
+                modifier = Modifier.size(22.dp).clip(RoundedCornerShape(3.dp))
                     .background(if (isSolo) VexMeterYellow else VexPanelElevated)
                     .clickable { onToggleSolo() },
                 contentAlignment = Alignment.Center
-            ) {
-                Text("S", color = if (isSolo) Color.Black else Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-            }
+            ) { Text("S", color = if (isSolo) Color.Black else Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold) }
         }
     }
 }
