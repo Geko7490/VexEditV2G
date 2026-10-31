@@ -412,4 +412,57 @@ class ExampleRobolectricTest {
   }
 
 
+  @Test
+  fun `project persistence retains mixer tracks and audio processing settings`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val repository = ProjectRepository(context)
+    val audioClip = com.example.data.MediaClip(
+      id = "persist_audio_clip",
+      name = "Persist Audio",
+      mediaType = com.example.data.MediaType.AUDIO,
+      trackId = "custom_music_track",
+      trackType = com.example.data.TrackType.AUDIO_MUSIC,
+      audioProperties = com.example.data.AudioProperties(
+        volume = 0.72f,
+        isMuted = true,
+        isSolo = false,
+        fadeInMs = 1200L,
+        fadeOutMs = 900L,
+        faderDb = -3.5f,
+        eqPreset = "Rock",
+        noiseGateEnabled = true,
+        compressorEnabled = true,
+        reverbLevel = 0.4f,
+        delayLevel = 0.2f,
+        limiterEnabled = true
+      )
+    )
+    val project = com.example.data.Project(
+      id = "persist_audio_project",
+      title = "Audio Persistence",
+      tracks = Project.defaultTracks().map {
+        if (it.id == "track_audio_1") it.copy(title = "Custom Music", isMuted = true, isSolo = true, faderDb = -4.5f) else it
+      },
+      clips = listOf(audioClip)
+    )
+    repository.saveProject(project)
+
+    val restored = ProjectRepository(context).projects.value.first { it.id == project.id }
+    val restoredTrack = restored.tracks.first { it.id == "track_audio_1" }
+    val restoredAudio = restored.clips.first { it.id == audioClip.id }.audioProperties
+    assertEquals("Custom Music", restoredTrack.title)
+    assertEquals(true, restoredTrack.isMuted)
+    assertEquals(true, restoredTrack.isSolo)
+    assertEquals(-4.5f, restoredTrack.faderDb)
+    assertEquals("Rock", restoredAudio.eqPreset)
+    assertEquals(1200L, restoredAudio.fadeInMs)
+    assertEquals(900L, restoredAudio.fadeOutMs)
+    assertEquals(true, restoredAudio.noiseGateEnabled)
+    assertEquals(true, restoredAudio.compressorEnabled)
+    assertEquals(true, restoredAudio.limiterEnabled)
+    assertEquals(0.4f, restoredAudio.reverbLevel)
+    assertEquals(0.2f, restoredAudio.delayLevel)
+  }
+
+
 }
