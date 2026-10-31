@@ -349,7 +349,7 @@ fun KeyframeEditorScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             TextButton(
-                onClick = { viewModel.setPlayheadPosition((playheadMs - 2000L).coerceAtLeast(0L)) }
+                onClick = { targetClip?.let { viewModel.jumpToPreviousKeyframe(it.id) } }
             ) {
                 Icon(Icons.Default.ChevronLeft, contentDescription = null, tint = VexTextPrimary, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(4.dp))
@@ -359,7 +359,17 @@ fun KeyframeEditorScreen(
             Button(
                 onClick = {
                     targetClip?.let {
-                        viewModel.addOrUpdateKeyframe(it.id, KeyframeParam.POSITION_X, posX, selectedCurve)
+                        viewModel.addOrUpdateKeyframes(
+                            it.id,
+                            mapOf(
+                                KeyframeParam.POSITION_X to posX,
+                                KeyframeParam.POSITION_Y to posY,
+                                KeyframeParam.SCALE to scaleVal,
+                                KeyframeParam.ROTATION to rotVal,
+                                KeyframeParam.OPACITY to opacityVal
+                            ),
+                            selectedCurve
+                        )
                     }
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = VexPanelElevated),
@@ -373,7 +383,7 @@ fun KeyframeEditorScreen(
             }
 
             TextButton(
-                onClick = { viewModel.setPlayheadPosition(playheadMs + 2000L) }
+                onClick = { targetClip?.let { viewModel.jumpToNextKeyframe(it.id) } }
             ) {
                 Text(Strings.get("next_keyframe", lang), color = VexTextPrimary, fontSize = 11.sp)
                 Spacer(modifier = Modifier.width(4.dp))
