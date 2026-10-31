@@ -37,7 +37,6 @@ import com.example.ui.theme.*
 import org.json.JSONArray
 import org.json.JSONObject
 
-@Composable
 private data class EffectPresetEntry(
     val name: String,
     val type: EffectType,
@@ -80,6 +79,7 @@ private fun effectPreviewFilter(type: EffectType, intensity: Float): ColorFilter
     return ColorFilter.colorMatrix(ColorMatrix(values))
 }
 
+@Composable
 fun EffectsLabScreen(
     viewModel: StudioViewModel,
     onNavigate: (Screen) -> Unit
