@@ -273,6 +273,101 @@ class ExampleRobolectricTest {
   }
 
   @Test
+  fun `selected keyframe value and easing can be edited and undone`() {
+    val application = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.StudioViewModel(application)
+    val keyframe = com.example.data.Keyframe(
+      id = "editable_keyframe",
+      timeMs = 1000L,
+      param = com.example.data.KeyframeParam.POSITION_X,
+      value = 10f,
+      curve = com.example.data.InterpolationType.LINEAR
+    )
+    val clip = com.example.data.MediaClip(
+      id = "editable_keyframe_clip",
+      name = "Keyframe Edit Test",
+      trackId = "track_video_1",
+      trackType = com.example.data.TrackType.VIDEO,
+      durationMs = 5000L,
+      keyframes = listOf(keyframe)
+    )
+    val project = com.example.data.Project(
+      id = "editable_keyframe_project",
+      title = "Editable Keyframe",
+      clips = listOf(clip),
+      durationMs = 5000L
+    )
+    vm.projectRepo.saveProject(project)
+    vm.selectProject(project)
+
+    vm.updateKeyframe(
+      clip.id,
+      keyframe.id,
+      value = 42f,
+      curve = com.example.data.InterpolationType.EASE_OUT
+    )
+    val updated = vm.currentProject.value!!.clips.first { it.id == clip.id }.keyframes.first()
+    assertEquals(42f, updated.value)
+    assertEquals(com.example.data.InterpolationType.EASE_OUT, updated.curve)
+
+    vm.undo()
+    val restored = vm.currentProject.value!!.clips.first { it.id == clip.id }.keyframes.first()
+    assertEquals(10f, restored.value)
+    assertEquals(com.example.data.InterpolationType.LINEAR, restored.curve)
+  }
+
+  @Test
+  fun `audio properties are clamped and mixer changes are undoable`() {
+    val application = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.StudioViewModel(application)
+    val clip = com.example.data.MediaClip(
+      id = "audio_properties_clip",
+      name = "Audio Properties Test",
+      mediaType = com.example.data.MediaType.AUDIO,
+      trackId = "track_audio_1",
+      trackType = com.example.data.TrackType.AUDIO_MUSIC,
+      audioProperties = com.example.data.AudioProperties()
+    )
+    val project = com.example.data.Project(
+      id = "audio_properties_project",
+      title = "Audio Properties",
+      clips = listOf(clip)
+    )
+    vm.projectRepo.saveProject(project)
+    vm.selectProject(project)
+
+    vm.updateAudioProperties(
+      clip.id,
+      clip.audioProperties.copy(
+        volume = 2f,
+        fadeInMs = -100L,
+        fadeOutMs = -200L,
+        reverbLevel = 2f,
+        delayLevel = -1f,
+        eqPreset = "Rock"
+      )
+    )
+    val edited = vm.currentProject.value!!.clips.first { it.id == clip.id }.audioProperties
+    assertEquals(1f, edited.volume)
+    assertEquals(0L, edited.fadeInMs)
+    assertEquals(0L, edited.fadeOutMs)
+    assertEquals(1f, edited.reverbLevel)
+    assertEquals(0f, edited.delayLevel)
+    assertEquals("Rock", edited.eqPreset)
+
+    vm.undo()
+    val restored = vm.currentProject.value!!.clips.first { it.id == clip.id }.audioProperties
+    assertEquals(1f, restored.volume)
+    assertEquals(0L, restored.fadeInMs)
+    assertEquals(0f, restored.reverbLevel)
+
+    vm.setTrackFader("track_audio_1", 100f)
+    assertEquals(6f, vm.currentProject.value!!.tracks.first { it.id == "track_audio_1" }.faderDb)
+    vm.undo()
+    assertEquals(0f, vm.currentProject.value!!.tracks.first { it.id == "track_audio_1" }.faderDb)
+  }
+
+  @Test
   fun `project aspect ratio change is undoable`() {
     val application = ApplicationProvider.getApplicationContext<android.app.Application>()
     val vm = com.example.ui.StudioViewModel(application)
