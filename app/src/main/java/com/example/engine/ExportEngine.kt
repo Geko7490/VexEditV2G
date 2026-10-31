@@ -6,6 +6,8 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.ColorMatrix
+import android.graphics.ColorMatrixColorFilter
 import android.graphics.Paint
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
@@ -697,7 +699,6 @@ class ExportEngine(private val context: Context) {
                 canvas.rotate(rot, width / 2f, height / 2f)
                 canvas.drawBitmap(clipBitmap, null, RectF(left, top, left + dstW, top + dstH), paint)
                 canvas.restore()
-            }
         }
         }
 
