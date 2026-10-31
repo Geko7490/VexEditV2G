@@ -106,14 +106,23 @@ fun AudioStudioScreen(
                 } else if (activeToolDialog == "eq") {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text("Choose a playback EQ preset", color = VexTextSecondary, fontSize = 11.sp)
-                        listOf("Flat", "Bass Boost", "Classical", "Dance", "Hip Hop", "Jazz", "Pop", "Rock").forEach { preset ->
-                            TextButton(onClick = { editEqPreset = preset }) {
-                                Text(
-                                    text = (if (editEqPreset == preset) "✓ " else "") + preset,
-                                    color = if (editEqPreset == preset) VexAccentLight else VexTextPrimary
-                                )
+                        listOf("Flat", "Bass Boost", "Classical", "Dance", "Hip Hop", "Jazz", "Pop", "Rock")
+                            .chunked(2).forEach { presetRow ->
+                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    presetRow.forEach { preset ->
+                                        TextButton(
+                                            onClick = { editEqPreset = preset },
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Text(
+                                                text = (if (editEqPreset == preset) "✓ " else "") + preset,
+                                                color = if (editEqPreset == preset) VexAccentLight else VexTextPrimary,
+                                                fontSize = 11.sp
+                                            )
+                                        }
+                                    }
+                                }
                             }
-                        }
                         Text("EQ is applied during timeline preview. Export processing is still pending.", color = VexTextSecondary, fontSize = 11.sp)
                     }
                 } else if (activeToolDialog == "reverb") {
