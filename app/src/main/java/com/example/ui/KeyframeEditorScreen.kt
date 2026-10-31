@@ -189,6 +189,7 @@ fun KeyframeEditorScreen(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
+                if (activeBottomTab == "Transform" || activeBottomTab == "Motion") {
                 KeyframeParamRow(
                     label = "Position X", valueText = String.format(java.util.Locale.US, "%.1f", posX),
                     value = posX, valueRange = -100f..100f, onValueChange = { posX = it }
@@ -197,19 +198,25 @@ fun KeyframeEditorScreen(
                     label = "Position Y", valueText = String.format(java.util.Locale.US, "%.1f", posY),
                     value = posY, valueRange = -100f..100f, onValueChange = { posY = it }
                 ) { targetClip?.let { viewModel.addOrUpdateKeyframe(it.id, KeyframeParam.POSITION_Y, posY, selectedCurve) } }
+                if (activeBottomTab == "Transform") {
                 KeyframeParamRow(
                     label = "Scale", valueText = "${scaleVal.toInt()}%", value = scaleVal,
                     valueRange = 10f..300f, onValueChange = { scaleVal = it }
                 ) { targetClip?.let { viewModel.addOrUpdateKeyframe(it.id, KeyframeParam.SCALE, scaleVal, selectedCurve) } }
+                }
                 KeyframeParamRow(
                     label = "Rotation", valueText = "${rotVal.toInt()}°", value = rotVal,
                     valueRange = -180f..180f, onValueChange = { rotVal = it }
                 ) { targetClip?.let { viewModel.addOrUpdateKeyframe(it.id, KeyframeParam.ROTATION, rotVal, selectedCurve) } }
+                }
+                if (activeBottomTab == "Opacity") {
                 KeyframeParamRow(
                     label = "Opacity", valueText = "${opacityVal.toInt()}%", value = opacityVal,
                     valueRange = 0f..100f, onValueChange = { opacityVal = it }
                 ) { targetClip?.let { viewModel.addOrUpdateKeyframe(it.id, KeyframeParam.OPACITY, opacityVal, selectedCurve) } }
+                }
 
+                if (activeBottomTab == "Curves") {
                 Spacer(modifier = Modifier.height(4.dp))
 
                 // Bézier Curve Graph Card
@@ -279,6 +286,7 @@ fun KeyframeEditorScreen(
                             }
                         }
                     }
+                }
                 }
             }
         }
