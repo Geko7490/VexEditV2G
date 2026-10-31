@@ -652,6 +652,31 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         projectRepo.saveProject(updatedProject)
     }
 
+    fun updateKeyframe(
+        clipId: String,
+        keyframeId: String,
+        value: Float? = null,
+        curve: InterpolationType? = null
+    ) {
+        val project = _currentProject.value ?: return
+        val clip = project.clips.find { it.id == clipId } ?: return
+        val existing = clip.keyframes.find { it.id == keyframeId } ?: return
+        val updatedKeyframe = existing.copy(
+            value = value ?: existing.value,
+            curve = curve ?: existing.curve
+        )
+        if (updatedKeyframe == existing) return
+        pushUndoState(project)
+        val updated = clip.copy(
+            keyframes = clip.keyframes.map { if (it.id == keyframeId) updatedKeyframe else it }
+        )
+        val updatedProject = project.copy(
+            clips = project.clips.map { if (it.id == clipId) updated else it }
+        )
+        _currentProject.value = updatedProject
+        projectRepo.saveProject(updatedProject)
+    }
+
     fun removeKeyframe(clipId: String, keyframeId: String) {
         val project = _currentProject.value ?: return
         val clip = project.clips.find { it.id == clipId } ?: return
