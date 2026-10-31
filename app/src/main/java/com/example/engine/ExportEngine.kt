@@ -726,7 +726,7 @@ class ExportEngine(private val context: Context) {
         val matrix = ColorMatrix()
         var changed = false
         effects.filter { it.isEnabled }.forEach { effect ->
-            val amount = effect.intensity.coerceIn(0f, 2f)
+            val amount = (effect.intensity * effect.opacity).coerceIn(0f, 2f)
             when (effect.type) {
                 EffectType.BRIGHTNESS -> {
                     val offset = (amount - 1f) * 48f
