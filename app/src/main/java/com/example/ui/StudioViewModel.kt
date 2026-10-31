@@ -166,7 +166,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         if (activeVideoClip != null && activeVideoClip.filePath.isNotEmpty()) {
             val offsetMs = ((posMs - activeVideoClip.startTimeMs) * activeVideoClip.speed).toLong().plus(activeVideoClip.sourceStartMs).coerceAtLeast(0L)
             val isMuted = activeVideoClip.audioProperties.isMuted
-            val vol = (activeVideoClip.volume * activeVideoClip.audioProperties.volume).coerceIn(0f, 1f)
+            val vol = activeVideoClip.volume.coerceIn(0f, 1f)
             player.bindVideoClip(
                 filePath = activeVideoClip.filePath,
                 startOffsetMs = offsetMs,
