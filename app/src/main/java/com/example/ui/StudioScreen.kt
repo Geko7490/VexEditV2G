@@ -946,12 +946,9 @@ fun StudioScreen(
                                                     },
                                                     onDragEnd = {
                                                         val deltaMs = (dragDeltaPx / pxPerMs).toLong()
-                                                        val centerMs = clip.startTimeMs + (clip.durationMs / 2) + deltaMs
-                                                        val targetIndex = trackClips.count { (it.startTimeMs + it.durationMs / 2) < centerMs }
-                                                            .coerceIn(0, trackClips.lastIndex)
-                                                        val currentIndex = trackClips.indexOfFirst { it.id == clip.id }
-                                                        if (currentIndex != -1 && targetIndex != currentIndex) {
-                                                            viewModel.reorderTrackClips(track.id, currentIndex, targetIndex)
+                                                        val targetStartMs = (clip.startTimeMs + deltaMs).coerceAtLeast(0L)
+                                                        if (targetStartMs != clip.startTimeMs) {
+                                                            viewModel.moveClip(clip.id, targetStartMs)
                                                         }
                                                         draggingClipId = null
                                                         dragDeltaPx = 0f
