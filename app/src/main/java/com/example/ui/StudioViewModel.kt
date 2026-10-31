@@ -15,6 +15,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -88,14 +89,16 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     private var playbackJob: Job? = null
 
     init {
-        val initialProjects = projectRepo.projects.value
-        if (initialProjects.isNotEmpty()) {
-            val proj = sanitizeProject(initialProjects.first())
-            _currentProject.value = proj
-            _selectedClipId.value = proj.clips.firstOrNull()?.id
-        } else {
-            _currentProject.value = null
-            _selectedClipId.value = null
+        // Room loads asynchronously; observe the project list so the last edited project
+        // becomes available after the database finishes loading.
+        viewModelScope.launch {
+            projectRepo.projects.collect { projects ->
+                if (_currentProject.value == null && projects.isNotEmpty()) {
+                    val project = sanitizeProject(projects.first())
+                    _currentProject.value = project
+                    _selectedClipId.value = project.clips.firstOrNull()?.id
+                }
+            }
         }
     }
 
