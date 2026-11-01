@@ -379,6 +379,85 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     // --- Clip Editing Actions ---
 
+    /** Adds another editable video lane; existing clips and lane ordering are preserved. */
+    fun addVideoTrack(): String? {
+        val project = _currentProject.value ?: return null
+        pushUndoState(project)
+        val nextNumber = (project.tracks.mapNotNull { track ->
+            Regex("^Video (\\d+)$").matchEntire(track.title)?.groupValues?.get(1)?.toIntOrNull()
+        }.maxOrNull() ?: 0) + 1
+        val track = Track(
+            id = "track_video_${UUID.randomUUID()}",
+            title = "Video $nextNumber",
+            subtitle = "Video",
+            type = TrackType.VIDEO
+        )
+        val updated = project.copy(tracks = project.tracks + track)
+        _currentProject.value = updated
+        projectRepo.saveProject(updated)
+        updateUndoRedoStates()
+        return track.id
+    }
+
+    /** Removes only an empty video lane so media can never be silently discarded. */
+    fun removeEmptyVideoTrack(trackId: String): Boolean {
+        val project = _currentProject.value ?: return false
+        val track = project.tracks.find { it.id == trackId } ?: return false
+        if (track.type != TrackType.VIDEO || project.clips.any { it.trackId == trackId }) return false
+        if (project.tracks.count { it.type == TrackType.VIDEO } <= 1) return false
+        pushUndoState(project)
+        val updated = project.copy(tracks = project.tracks.filterNot { it.id == trackId })
+        _currentProject.value = updated
+        projectRepo.saveProject(updated)
+        return true
+    }
+
+    /**
+     * Joins adjacent pieces from the same source on one lane.
+     * It refuses gaps, overlaps, mixed sources, speeds or media types to avoid
+     * creating a clip whose source-time mapping would be ambiguous.
+     */
+    fun mergeClips(clipIds: Set<String>): Boolean {
+        val project = _currentProject.value ?: return false
+        if (clipIds.size < 2) return false
+        val selected = project.clips.filter { it.id in clipIds }.sortedBy { it.startTimeMs }
+        if (selected.size != clipIds.size) return false
+        val first = selected.first()
+        val compatible = selected.all { clip ->
+            clip.trackId == first.trackId &&
+                clip.trackType == first.trackType &&
+                clip.mediaType == first.mediaType &&
+                clip.filePath == first.filePath &&
+                clip.uriString == first.uriString &&
+                clip.speed == first.speed &&
+                clip.sourceDurationMs == first.sourceDurationMs
+        }
+        if (!compatible) return false
+        val contiguous = selected.zipWithNext().all { (left, right) ->
+            val timelineGap = right.startTimeMs - (left.startTimeMs + left.durationMs)
+            val expectedSourceStart = left.sourceStartMs + (left.durationMs * left.speed).toLong()
+            kotlin.math.abs(timelineGap) <= 1L &&
+                kotlin.math.abs(right.sourceStartMs - expectedSourceStart) <= 1L
+        }
+        if (!contiguous) return false
+
+        pushUndoState(project)
+        val mergedEnd = selected.last().startTimeMs + selected.last().durationMs
+        val merged = first.copy(
+            durationMs = mergedEnd - first.startTimeMs,
+            name = first.name.removeSuffix(" (Part 2)")
+        )
+        val selectedIds = selected.mapTo(mutableSetOf()) { it.id }
+        val updatedClips = project.clips.filterNot { it.id in selectedIds } + merged
+        val duration = updatedClips.maxOfOrNull { it.startTimeMs + it.durationMs } ?: 0L
+        val updated = project.copy(clips = updatedClips, durationMs = duration)
+        _currentProject.value = updated
+        _selectedClipId.value = merged.id
+        projectRepo.saveProject(updated)
+        normalizeTimelineState()
+        return true
+    }
+
     /** Reorders whole timeline lanes while keeping every clip attached to its track. */
     fun reorderTracks(fromIndex: Int, toIndex: Int) {
         val project = _currentProject.value ?: return
