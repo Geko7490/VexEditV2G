@@ -382,6 +382,45 @@ class ExampleRobolectricTest {
   }
 
   @Test
+  fun `timeline snapping aligns clip start and end to nearby clip edges`() {
+    val application = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.StudioViewModel(application)
+    val moving = com.example.data.MediaClip(
+      id = "snap_moving",
+      name = "Moving Clip",
+      trackId = "track_video_1",
+      trackType = com.example.data.TrackType.VIDEO,
+      startTimeMs = 1000L,
+      durationMs = 2000L
+    )
+    val neighbor = com.example.data.MediaClip(
+      id = "snap_neighbor",
+      name = "Neighbor",
+      trackId = "track_video_1",
+      trackType = com.example.data.TrackType.VIDEO,
+      startTimeMs = 5000L,
+      durationMs = 1000L
+    )
+    val project = com.example.data.Project(
+      id = "timeline_snap_project",
+      title = "Timeline Snap",
+      clips = listOf(moving, neighbor),
+      durationMs = 6000L
+    )
+    vm.selectProject(project)
+
+    val startSnap = vm.findTimelineSnap(moving.id, 4920L, 120L)
+    assertEquals(5000L, startSnap?.first)
+    assertEquals(5000L, startSnap?.second)
+
+    val endSnap = vm.findTimelineSnap(moving.id, 3100L, 120L)
+    assertEquals(3000L, endSnap?.first)
+    assertEquals(5000L, endSnap?.second)
+
+    assertNull(vm.findTimelineSnap(moving.id, 20000L, 100L))
+  }
+
+  @Test
   fun `timeline clip can move to an empty time range and undo restores its position`() {
     val application = ApplicationProvider.getApplicationContext<android.app.Application>()
     val vm = com.example.ui.StudioViewModel(application)
