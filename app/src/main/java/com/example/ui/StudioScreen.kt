@@ -100,6 +100,15 @@ fun StudioScreen(
     var snapGuideTimeMs by remember { mutableStateOf<Long?>(null) }
     var activeTrimmingInfo by remember { mutableStateOf<String?>(null) }
     var activeTrimSession by remember { mutableStateOf<ActiveTrimSession?>(null) }
+    var isMultiSelectMode by remember { mutableStateOf(false) }
+    var multiSelectedClipIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var bulkMoveMenuExpanded by remember { mutableStateOf(false) }
+
+    LaunchedEffect(project?.id, project?.clips?.map { it.id }) {
+        val existingIds = project?.clips?.mapTo(mutableSetOf()) { it.id } ?: emptySet()
+        multiSelectedClipIds = multiSelectedClipIds.intersect(existingIds)
+        if (multiSelectedClipIds.isEmpty()) isMultiSelectMode = false
+    }
 
     val selectedClip = remember(project, selectedClipId) {
         project?.clips?.find { it.id == selectedClipId }
@@ -616,6 +625,67 @@ fun StudioScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 6.dp, vertical = 3.dp)
                     .horizontalScroll(rememberScrollState()),
+                if (isMultiSelectMode) {
+                    Text(
+                        text = "${multiSelectedClipIds.size} selected",
+                        color = VexAccentLight,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 5.dp)
+                    )
+                    FilledTonalButton(
+                        onClick = { viewModel.deleteClips(multiSelectedClipIds); multiSelectedClipIds = emptySet(); isMultiSelectMode = false },
+                        enabled = multiSelectedClipIds.isNotEmpty(),
+                        colors = ButtonDefaults.filledTonalButtonColors(containerColor = VexPanelElevated, contentColor = VexMeterRed),
+                        contentPadding = PaddingValues(horizontal = 9.dp, vertical = 4.dp),
+                        modifier = Modifier.height(34.dp).testTag("timeline_bulk_delete_btn")
+                    ) {
+                        Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(15.dp))
+                        Spacer(Modifier.width(3.dp))
+                        Text("Delete", fontSize = 11.sp)
+                    }
+                    Box {
+                        FilledTonalButton(
+                            onClick = { bulkMoveMenuExpanded = true },
+                            enabled = multiSelectedClipIds.isNotEmpty(),
+                            colors = ButtonDefaults.filledTonalButtonColors(containerColor = VexPanelElevated, contentColor = VexAccentLight),
+                            contentPadding = PaddingValues(horizontal = 9.dp, vertical = 4.dp),
+                            modifier = Modifier.height(34.dp).testTag("timeline_bulk_move_btn")
+                        ) {
+                            Icon(Icons.Default.DriveFileMove, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(Modifier.width(3.dp))
+                            Text("Move to", fontSize = 11.sp)
+                        }
+                        DropdownMenu(expanded = bulkMoveMenuExpanded, onDismissRequest = { bulkMoveMenuExpanded = false }) {
+                            (project?.tracks ?: emptyList()).forEach { target ->
+                                DropdownMenuItem(
+                                    text = { Text(target.title, fontSize = 12.sp) },
+                                    onClick = {
+                                        viewModel.moveClipsToTrack(multiSelectedClipIds, target.id)
+                                        bulkMoveMenuExpanded = false
+                                    },
+                                    enabled = multiSelectedClipIds.any { id ->
+                                        project?.clips?.any { it.id == id && it.trackId != target.id } == true
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    FilledTonalButton(
+                        onClick = { isMultiSelectMode = false; multiSelectedClipIds = emptySet() },
+                        colors = ButtonDefaults.filledTonalButtonColors(containerColor = VexPanelElevated, contentColor = VexTextSecondary),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                        modifier = Modifier.height(34.dp)
+                    ) { Text("Done", fontSize = 11.sp) }
+                } else {
+                    FilledTonalButton(
+                        onClick = { isMultiSelectMode = true; multiSelectedClipIds = selectedClipId?.let { setOf(it) } ?: emptySet() },
+                        colors = ButtonDefaults.filledTonalButtonColors(containerColor = VexPanelElevated, contentColor = VexAccentLight),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                        modifier = Modifier.height(34.dp).testTag("timeline_multi_select_btn")
+                    ) { Text("Select", fontSize = 11.sp) }
+                }
+
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
@@ -998,7 +1068,7 @@ fun StudioScreen(
                                     .background(if (isDropTarget && acceptsDraggedClip) VexAccent.copy(alpha = 0.12f) else VexPanel.copy(alpha = 0.4f))
                             ) {
                                 trackClips.forEachIndexed { clipIndex, clip ->
-                                    val isSelected = clip.id == selectedClipId
+                                    val isSelected = clip.id == selectedClipId || clip.id in multiSelectedClipIds
                                     val isDraggingThis = draggingClipId == clip.id
 
                                     val trim = activeTrimSession
@@ -1061,9 +1131,19 @@ fun StudioScreen(
                                                 color = if (isSelected) VexAccent else VexBorder,
                                                 shape = RoundedCornerShape(4.dp)
                                             )
-                                            .clickable { viewModel.selectClip(clip.id) }
-                                            .pointerInput(clip.id, pxPerMs, track.id, tracks.size) {
-                                                detectDragGesturesAfterLongPress(
+                                            .clickable {
+                                                if (isMultiSelectMode) {
+                                                    multiSelectedClipIds = if (clip.id in multiSelectedClipIds) {
+                                                        multiSelectedClipIds - clip.id
+                                                    } else {
+                                                        multiSelectedClipIds + clip.id
+                                                    }
+                                                } else {
+                                                    viewModel.selectClip(clip.id)
+                                                }
+                                            }
+                                            .pointerInput(clip.id, pxPerMs, track.id, tracks.size, isMultiSelectMode) {
+                                                if (!isMultiSelectMode) detectDragGesturesAfterLongPress(
                                                     onDragStart = {
                                                         draggingClipId = clip.id
                                                         dragDeltaPx = 0f
