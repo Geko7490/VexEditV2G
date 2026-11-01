@@ -121,9 +121,16 @@ fun StudioScreen(
         } ?: emptyList()
     }
 
-    val activeVisualClip = remember(visualClips, playheadMs) {
-        visualClips.find { playheadMs >= it.startTimeMs && playheadMs < (it.startTimeMs + it.durationMs) }
-            ?: (if (visualClips.isNotEmpty() && playheadMs <= 0L) visualClips.first() else null)
+    val trackOrder = remember(project?.tracks) {
+        project?.tracks?.mapIndexed { index, track -> track.id to index }?.toMap().orEmpty()
+    }
+    val activeVisualClip = remember(visualClips, playheadMs, trackOrder) {
+        visualClips
+            .filter { playheadMs >= it.startTimeMs && playheadMs < (it.startTimeMs + it.durationMs) }
+            .maxByOrNull { trackOrder[it.trackId] ?: Int.MIN_VALUE }
+            ?: (if (visualClips.isNotEmpty() && playheadMs <= 0L) {
+                visualClips.maxByOrNull { trackOrder[it.trackId] ?: Int.MIN_VALUE }
+            } else null)
     }
 
     // Synchronize media player to current playhead and clip
