@@ -434,6 +434,24 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         return true
     }
 
+    /** Removes only an empty additional audio lane; populated lanes are protected. */
+    fun removeEmptyAudioTrack(trackId: String): Boolean {
+        val project = _currentProject.value ?: return false
+        val track = project.tracks.find { it.id == trackId } ?: return false
+        val isAudio = track.type == TrackType.AUDIO_MUSIC ||
+            track.type == TrackType.AUDIO_VOICE || track.type == TrackType.AUDIO_SFX
+        if (!isAudio || project.clips.any { it.trackId == trackId }) return false
+        val audioTrackCount = project.tracks.count {
+            it.type == TrackType.AUDIO_MUSIC || it.type == TrackType.AUDIO_VOICE || it.type == TrackType.AUDIO_SFX
+        }
+        if (audioTrackCount <= 1) return false
+        pushUndoState(project)
+        val updated = project.copy(tracks = project.tracks.filterNot { it.id == trackId })
+        _currentProject.value = updated
+        projectRepo.saveProject(updated)
+        return true
+    }
+
     /**
      * Joins adjacent pieces from the same source on one lane.
      * It refuses gaps, overlaps, mixed sources, speeds or media types to avoid
