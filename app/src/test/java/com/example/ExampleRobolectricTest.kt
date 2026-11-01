@@ -901,6 +901,19 @@ class ExampleRobolectricTest {
         it.type == com.example.data.TrackType.AUDIO_VOICE ||
         it.type == com.example.data.TrackType.AUDIO_SFX
     })
+    assertEquals(true, vm.removeEmptyAudioTrack(newTrackId!!))
+    assertEquals(3, vm.currentProject.value!!.tracks.count {
+      it.type == com.example.data.TrackType.AUDIO_MUSIC ||
+        it.type == com.example.data.TrackType.AUDIO_VOICE ||
+        it.type == com.example.data.TrackType.AUDIO_SFX
+    })
+    assertEquals(false, vm.removeEmptyAudioTrack("track_audio_1"))
+    vm.undo()
+    assertEquals(4, vm.currentProject.value!!.tracks.count {
+      it.type == com.example.data.TrackType.AUDIO_MUSIC ||
+        it.type == com.example.data.TrackType.AUDIO_VOICE ||
+        it.type == com.example.data.TrackType.AUDIO_SFX
+    })
   }
 
   @Test
