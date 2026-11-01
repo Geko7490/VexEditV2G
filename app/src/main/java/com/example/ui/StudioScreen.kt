@@ -1073,7 +1073,7 @@ fun StudioScreen(
                                     .background(if (isDropTarget && acceptsDraggedClip) VexAccent.copy(alpha = 0.12f) else VexPanel.copy(alpha = 0.4f))
                             ) {
                                 trackClips.forEachIndexed { clipIndex, clip ->
-                                    val isSelected = clip.id == selectedClipId || clip.id in multiSelectedClipIds
+                                    val isSelected = if (isMultiSelectMode) clip.id in multiSelectedClipIds else clip.id == selectedClipId
                                     val isDraggingThis = draggingClipId == clip.id
 
                                     val trim = activeTrimSession
