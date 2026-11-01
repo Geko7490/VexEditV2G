@@ -1042,6 +1042,21 @@ fun StudioScreen(
                                         Spacer(modifier = Modifier.width(1.dp))
                                     }
                                     Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        val canRemoveEmptyLane = project?.clips?.none { it.trackId == track.id } == true &&
+                                            ((track.type == TrackType.VIDEO && tracks.count { it.type == TrackType.VIDEO } > 1) ||
+                                                ((track.type == TrackType.AUDIO_MUSIC || track.type == TrackType.AUDIO_VOICE || track.type == TrackType.AUDIO_SFX) &&
+                                                    tracks.count { it.type == TrackType.AUDIO_MUSIC || it.type == TrackType.AUDIO_VOICE || it.type == TrackType.AUDIO_SFX } > 1))
+                                        if (canRemoveEmptyLane) {
+                                            Text(
+                                                text = "×",
+                                                color = VexMeterRed,
+                                                fontSize = 13.sp,
+                                                modifier = Modifier.clickable {
+                                                    if (track.type == TrackType.VIDEO) viewModel.removeEmptyVideoTrack(track.id)
+                                                    else viewModel.removeEmptyAudioTrack(track.id)
+                                                }.testTag("timeline_remove_track_${track.id}")
+                                            )
+                                        }
                                         Text(
                                             text = "↑",
                                             color = if (trackIndex > 0) VexTextSecondary else VexTextSecondary.copy(alpha = 0.25f),
