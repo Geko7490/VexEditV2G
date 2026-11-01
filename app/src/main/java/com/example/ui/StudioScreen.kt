@@ -1056,13 +1056,27 @@ fun StudioScreen(
                             }
                         }
                     }
-                    TextButton(
-                        onClick = { viewModel.addVideoTrack() },
-                        modifier = Modifier.fillMaxWidth().height(30.dp).testTag("timeline_add_video_track_btn"),
-                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth().height(32.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(13.dp))
-                        Text("Video layer", fontSize = 10.sp, maxLines = 1)
+                        TextButton(
+                            onClick = { viewModel.addVideoTrack() },
+                            modifier = Modifier.weight(1f).fillMaxHeight().testTag("timeline_add_video_track_btn"),
+                            contentPadding = PaddingValues(horizontal = 1.dp, vertical = 0.dp)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(11.dp))
+                            Text("V", fontSize = 10.sp, maxLines = 1)
+                        }
+                        TextButton(
+                            onClick = { viewModel.addAudioTrack() },
+                            modifier = Modifier.weight(1f).fillMaxHeight().testTag("timeline_add_audio_track_btn"),
+                            contentPadding = PaddingValues(horizontal = 1.dp, vertical = 0.dp)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(11.dp))
+                            Text("A", fontSize = 10.sp, maxLines = 1)
+                        }
                     }
                 }
 
