@@ -778,9 +778,8 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         _currentProject.value = updatedProject
         _selectedClipId.value = selected.firstOrNull()?.id
         projectRepo.saveProject(updatedProject)
-        syncPlayerToPlayhead(_playheadPositionMs.value)
+        normalizeTimelineState()
         return true
-            normalizeTimelineState()
 }
 
 
