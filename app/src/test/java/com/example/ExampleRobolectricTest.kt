@@ -920,4 +920,39 @@ class ExampleRobolectricTest {
     assertEquals(false, vm.canUndo.value)
   }
 
+
+  @Test
+  fun `undo redo clamps playhead and restores selected clip state`() {
+    val application = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.StudioViewModel(application)
+    val clip = com.example.data.MediaClip(
+      id = "history_sync_clip",
+      name = "History Sync",
+      trackId = "track_video_1",
+      trackType = com.example.data.TrackType.VIDEO,
+      startTimeMs = 0L,
+      durationMs = 10000L,
+      sourceDurationMs = 10000L
+    )
+    vm.selectProject(com.example.data.Project(
+      id = "history_sync_project",
+      title = "History Sync",
+      clips = listOf(clip),
+      durationMs = 10000L
+    ))
+    vm.selectClip(clip.id)
+    vm.setPlayheadPosition(8000L)
+
+    // Shrink the project below the current playhead, then redo that edit.
+    vm.trimClipEnd(clip.id, -8000L)
+    vm.undo()
+    assertEquals(10000L, vm.currentProject.value!!.durationMs)
+    assertEquals(8000L, vm.playheadPositionMs.value)
+
+    vm.redo()
+    assertEquals(2000L, vm.currentProject.value!!.durationMs)
+    assertEquals(2000L, vm.playheadPositionMs.value)
+    assertEquals(clip.id, vm.selectedClipId.value)
+  }
+
 }
