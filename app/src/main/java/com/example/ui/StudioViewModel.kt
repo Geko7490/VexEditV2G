@@ -1196,6 +1196,25 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         settingsPrefs.edit().putString("performance_mode", mode.name).apply()
     }
 
+
+    /** Recomputes the real temporary cache footprint instead of showing a placeholder value. */
+    fun refreshCacheSize() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val bytes = listOfNotNull(
+                getApplication<Application>().cacheDir,
+                getApplication<Application>().externalCacheDir
+            ).sumOf { directory ->
+                runCatching {
+                    if (directory.exists()) directory.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+                    else 0L
+                }.getOrDefault(0L)
+            }
+            val sizeMb = (bytes / (1024L * 1024L)).coerceAtLeast(0L)
+            _settings.value = _settings.value.copy(cacheSizeMb = sizeMb)
+        }
+    }
+
+
     fun clearCache(): Boolean {
         if (_isExporting.value) return false
         var succeeded = true
