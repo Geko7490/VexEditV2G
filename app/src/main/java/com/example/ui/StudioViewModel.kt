@@ -507,6 +507,41 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         syncPlayerToPlayhead(_playheadPositionMs.value)
     }
 
+    /**
+     * Returns the snapped clip start and the timeline boundary used as its guide.
+     * Both clip edges can snap to clip boundaries on any track or to the playhead.
+     */
+    fun findTimelineSnap(
+        clipId: String,
+        proposedStartMs: Long,
+        thresholdMs: Long = 150L
+    ): Pair<Long, Long>? {
+        val project = _currentProject.value ?: return null
+        val clip = project.clips.find { it.id == clipId } ?: return null
+        val threshold = thresholdMs.coerceAtLeast(0L)
+        if (threshold == 0L) return null
+
+        val anchors = project.clips
+            .filterNot { it.id == clipId }
+            .flatMap { other -> listOf(other.startTimeMs, other.startTimeMs + other.durationMs) }
+            .plus(_playheadPositionMs.value)
+            .distinct()
+
+        return anchors
+            .flatMap { anchor ->
+                listOf(
+                    proposedStartMs to anchor,
+                    (anchor - clip.durationMs).coerceAtLeast(0L) to anchor
+                )
+            }
+            .filter { (candidateStart, _) ->
+                kotlin.math.abs(candidateStart - proposedStartMs) <= threshold
+            }
+            .minByOrNull { (candidateStart, _) ->
+                kotlin.math.abs(candidateStart - proposedStartMs)
+            }
+    }
+
     fun duplicateClip(clipId: String) {
         val project = _currentProject.value ?: return
         val clip = project.clips.find { it.id == clipId } ?: return
