@@ -1010,10 +1010,7 @@ fun StudioScreen(
                                                         val targetTrackIndex = (sourceTrackIndex + rowDelta).coerceIn(tracks.indices)
                                                         val targetTrack = tracks.getOrNull(targetTrackIndex)
                                                         if (targetTrack != null && targetTrack.id != track.id) {
-                                                            viewModel.moveClipToTrack(clip.id, targetTrack.id)
-                                                            if (snappedStartMs != clip.startTimeMs) {
-                                                                viewModel.moveClip(clip.id, snappedStartMs)
-                                                            }
+                                                            viewModel.moveClipToTrack(clip.id, targetTrack.id, snappedStartMs)
                                                         } else if (snappedStartMs != clip.startTimeMs) {
                                                             viewModel.moveClip(clip.id, snappedStartMs)
                                                         }
