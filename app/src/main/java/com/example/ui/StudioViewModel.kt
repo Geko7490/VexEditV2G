@@ -675,6 +675,67 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         syncPlayerToPlayhead(_playheadPositionMs.value)
     }
 
+
+    /**
+     * Deletes a group of clips as one undoable edit. Bulk deletion deliberately
+     * preserves timeline gaps so clips on every track keep their absolute timing.
+     */
+    fun deleteClips(clipIds: Set<String>) {
+        val project = _currentProject.value ?: return
+        val ids = clipIds.filterTo(mutableSetOf()) { id -> project.clips.any { it.id == id } }
+        if (ids.isEmpty()) return
+
+        pushUndoState(project)
+        val remaining = project.clips.filterNot { it.id in ids }
+        val maxEnd = remaining.maxOfOrNull { it.startTimeMs + it.durationMs } ?: 0L
+        val firstVisual = remaining.firstOrNull { it.trackType == TrackType.VIDEO }
+        val updatedProject = project.copy(
+            clips = remaining,
+            durationMs = maxEnd,
+            thumbnailPath = firstVisual?.let { it.thumbnailPath.ifEmpty { it.filePath } }
+        )
+        _currentProject.value = updatedProject
+        _selectedClipId.value = remaining.firstOrNull()?.id
+        _playheadPositionMs.value = _playheadPositionMs.value.coerceAtMost(maxEnd)
+        projectRepo.saveProject(updatedProject)
+        syncPlayerToPlayhead(_playheadPositionMs.value)
+    }
+
+    /**
+     * Moves selected clips together without changing their relative or absolute
+     * timeline positions. The operation is rejected atomically if any clip is
+     * incompatible with the destination lane.
+     */
+    fun moveClipsToTrack(clipIds: Set<String>, targetTrackId: String): Boolean {
+        val project = _currentProject.value ?: return false
+        val targetTrack = project.tracks.find { it.id == targetTrackId } ?: return false
+        val selected = project.clips.filter { it.id in clipIds }
+        if (selected.isEmpty()) return false
+
+        val compatible = selected.all { clip ->
+            when (clip.mediaType) {
+                MediaType.AUDIO -> targetTrack.type in listOf(
+                    TrackType.AUDIO_MUSIC, TrackType.AUDIO_VOICE, TrackType.AUDIO_SFX
+                )
+                MediaType.VIDEO, MediaType.PHOTO -> targetTrack.type == TrackType.VIDEO
+            }
+        }
+        if (!compatible) return false
+        if (selected.all { it.trackId == targetTrackId }) return false
+
+        pushUndoState(project)
+        val updatedClips = project.clips.map { clip ->
+            if (clip.id in clipIds) clip.copy(trackId = targetTrack.id, trackType = targetTrack.type) else clip
+        }
+        val updatedProject = project.copy(clips = updatedClips)
+        _currentProject.value = updatedProject
+        _selectedClipId.value = selected.firstOrNull()?.id
+        projectRepo.saveProject(updatedProject)
+        syncPlayerToPlayhead(_playheadPositionMs.value)
+        return true
+    }
+
+
     fun stepPlayhead(deltaMs: Long) {
         val current = _playheadPositionMs.value
         val maxDur = _currentProject.value?.durationMs ?: 0L
