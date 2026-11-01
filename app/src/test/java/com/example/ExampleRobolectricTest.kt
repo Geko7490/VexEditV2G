@@ -421,6 +421,39 @@ class ExampleRobolectricTest {
   }
 
   @Test
+  fun `timeline moves audio clips between compatible tracks as one undoable edit`() {
+    val application = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.StudioViewModel(application)
+    val audioClip = com.example.data.MediaClip(
+      id = "movable_audio",
+      name = "Voice Take",
+      mediaType = com.example.data.MediaType.AUDIO,
+      trackId = "track_audio_1",
+      trackType = com.example.data.TrackType.AUDIO_MUSIC,
+      startTimeMs = 1200L,
+      durationMs = 3500L
+    )
+    val project = com.example.data.Project(
+      id = "cross_track_project",
+      title = "Cross Track",
+      clips = listOf(audioClip),
+      durationMs = 4700L
+    )
+    vm.selectProject(project)
+
+    vm.moveClipToTrack(audioClip.id, "track_audio_voice", 1500L)
+    val moved = vm.currentProject.value!!.clips.single()
+    assertEquals("track_audio_voice", moved.trackId)
+    assertEquals(com.example.data.TrackType.AUDIO_VOICE, moved.trackType)
+    assertEquals(1500L, moved.startTimeMs)
+
+    vm.undo()
+    val restored = vm.currentProject.value!!.clips.single()
+    assertEquals("track_audio_1", restored.trackId)
+    assertEquals(1200L, restored.startTimeMs)
+  }
+
+  @Test
   fun `timeline audio track mute and solo controls update project state`() {
     val application = ApplicationProvider.getApplicationContext<android.app.Application>()
     val vm = com.example.ui.StudioViewModel(application)
