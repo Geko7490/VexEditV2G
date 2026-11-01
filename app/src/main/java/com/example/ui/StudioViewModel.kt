@@ -33,6 +33,12 @@ enum class Screen {
     IMPORT_MEDIA
 }
 
+private data class TimelineHistoryEntry(
+    val project: Project,
+    val playheadPositionMs: Long,
+    val selectedClipId: String?
+)
+
 class StudioViewModel(application: Application) : AndroidViewModel(application) {
 
     val projectRepo = ProjectRepository(application)
@@ -65,8 +71,8 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     val beforeAfterMode: StateFlow<Boolean> = _beforeAfterMode.asStateFlow()
 
     // Undo / Redo stacks
-    private val undoStack = mutableListOf<Project>()
-    private val redoStack = mutableListOf<Project>()
+    private val undoStack = mutableListOf<TimelineHistoryEntry>()
+    private val redoStack = mutableListOf<TimelineHistoryEntry>()
     private val _canUndo = MutableStateFlow(false)
     val canUndo: StateFlow<Boolean> = _canUndo.asStateFlow()
     private val _canRedo = MutableStateFlow(false)
@@ -299,8 +305,15 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     // --- State mutation with UNDO / REDO ---
 
+    private fun captureHistoryEntry(project: Project): TimelineHistoryEntry =
+        TimelineHistoryEntry(
+            project = project,
+            playheadPositionMs = _playheadPositionMs.value,
+            selectedClipId = _selectedClipId.value
+        )
+
     private fun pushUndoState(project: Project) {
-        undoStack.add(project)
+        undoStack.add(captureHistoryEntry(project))
         if (undoStack.size > 30) undoStack.removeAt(0)
         redoStack.clear()
         updateUndoRedoStates()
@@ -311,21 +324,21 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         _canRedo.value = redoStack.isNotEmpty()
     }
 
-    private fun restoreHistoryProject(project: Project) {
+    private fun restoreHistoryProject(entry: TimelineHistoryEntry) {
+        val project = entry.project
         _currentProject.value = project
         val playhead = if (project.durationMs > 0L) {
-            _playheadPositionMs.value.coerceIn(0L, project.durationMs)
+            entry.playheadPositionMs.coerceIn(0L, project.durationMs)
         } else {
             0L
         }
         _playheadPositionMs.value = playhead
-        if (project.clips.none { it.id == _selectedClipId.value }) {
-            _selectedClipId.value = project.clips.firstOrNull()?.id
-        }
+        _selectedClipId.value = entry.selectedClipId
+            ?.takeIf { selectedId -> project.clips.any { it.id == selectedId } }
+            ?: project.clips.firstOrNull()?.id
         projectRepo.saveProject(project)
         updateUndoRedoStates()
-        // History restoration changes the media graph as well as the timeline data.
-        // Rebind all active video/audio sources at the restored playhead to avoid stale preview.
+        // Restore timeline data and its matching editor position/selection as one history state.
         syncPlayerToPlayhead(playhead)
     }
 
@@ -350,7 +363,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         val current = _currentProject.value ?: return
         if (undoStack.isNotEmpty()) {
             val prev = undoStack.removeAt(undoStack.lastIndex)
-            redoStack.add(current)
+            redoStack.add(captureHistoryEntry(current))
             restoreHistoryProject(prev)
         }
     }
@@ -359,7 +372,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         val current = _currentProject.value ?: return
         if (redoStack.isNotEmpty()) {
             val next = redoStack.removeAt(redoStack.lastIndex)
-            undoStack.add(current)
+            undoStack.add(captureHistoryEntry(current))
             restoreHistoryProject(next)
         }
     }
