@@ -783,6 +783,41 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 }
 
 
+    /**
+     * Shifts a group of selected clips by the same timeline offset.
+     * Relative spacing and overlaps are preserved, and negative movement is
+     * clamped so no selected clip can move before the timeline origin.
+     */
+    fun moveClipsByDelta(clipIds: Set<String>, deltaMs: Long): Boolean {
+        val project = _currentProject.value ?: return false
+        val selected = project.clips.filter { it.id in clipIds }
+        if (selected.isEmpty() || deltaMs == 0L) return false
+
+        val earliestStart = selected.minOf { it.startTimeMs.coerceAtLeast(0L) }
+        val latestEnd = selected.maxOf { clip ->
+            clip.startTimeMs.coerceAtLeast(0L) + clip.durationMs.coerceAtLeast(0L)
+        }
+        val safeDelta = when {
+            deltaMs < 0L -> maxOf(deltaMs, -earliestStart)
+            deltaMs > 0L -> minOf(deltaMs, Long.MAX_VALUE - latestEnd)
+            else -> 0L
+        }
+        if (safeDelta == 0L) return false
+
+        pushUndoState(project)
+        val updatedClips = project.clips.map { clip ->
+            if (clip.id in clipIds) {
+                clip.copy(startTimeMs = (clip.startTimeMs.coerceAtLeast(0L) + safeDelta).coerceAtLeast(0L))
+            } else clip
+        }
+        val updatedProject = project.copy(clips = updatedClips)
+        _currentProject.value = updatedProject
+        _selectedClipId.value = selected.firstOrNull()?.id
+        projectRepo.saveProject(updatedProject)
+        normalizeTimelineState()
+        return true
+    }
+
     fun stepPlayhead(deltaMs: Long) {
         val current = _playheadPositionMs.value
         val maxDur = _currentProject.value?.durationMs ?: 0L
