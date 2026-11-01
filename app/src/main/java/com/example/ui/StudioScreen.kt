@@ -93,6 +93,7 @@ fun StudioScreen(
     var zoomScale by remember { mutableFloatStateOf(1.0f) }
     var draggingClipId by remember { mutableStateOf<String?>(null) }
     var dragDeltaPx by remember { mutableFloatStateOf(0f) }
+    var snapGuideTimeMs by remember { mutableStateOf<Long?>(null) }
     var activeTrimmingInfo by remember { mutableStateOf<String?>(null) }
     var activeTrimSession by remember { mutableStateOf<ActiveTrimSession?>(null) }
 
@@ -908,9 +909,16 @@ fun StudioScreen(
                                         Pair(clip.startTimeMs, clip.durationMs)
                                     }
 
-                                    val clipStartDp = (effectiveStartMs * dpPerMs).dp
-                                    val dragOffsetDp = if (isDraggingThis) with(density) { dragDeltaPx.toDp() } else 0.dp
-                                    val leftOffset = (clipStartDp + dragOffsetDp).coerceAtLeast(0.dp)
+                                    val rawDraggedStartMs = (clip.startTimeMs + (dragDeltaPx / pxPerMs).toLong()).coerceAtLeast(0L)
+                                    val snappedDrag = if (isDraggingThis) {
+                                        viewModel.findTimelineSnap(
+                                            clip.id,
+                                            rawDraggedStartMs,
+                                            (120f / pxPerMs).toLong().coerceIn(40L, 1000L)
+                                        )
+                                    } else null
+                                    val visualStartMs = if (isDraggingThis) snappedDrag?.first ?: rawDraggedStartMs else effectiveStartMs
+                                    val leftOffset = (visualStartMs * dpPerMs).dp.coerceAtLeast(0.dp)
                                     val clipWidth = (effectiveDurationMs * dpPerMs).dp.coerceAtLeast(36.dp)
 
                                     Box(
@@ -945,20 +953,32 @@ fun StudioScreen(
                                                         viewModel.selectClip(clip.id)
                                                     },
                                                     onDragEnd = {
-                                                        val deltaMs = (dragDeltaPx / pxPerMs).toLong()
-                                                        val targetStartMs = (clip.startTimeMs + deltaMs).coerceAtLeast(0L)
-                                                        if (targetStartMs != clip.startTimeMs) {
-                                                            viewModel.moveClip(clip.id, targetStartMs)
+                                                        val rawStartMs = (clip.startTimeMs + (dragDeltaPx / pxPerMs).toLong()).coerceAtLeast(0L)
+                                                        val snappedStartMs = viewModel.findTimelineSnap(
+                                                            clip.id,
+                                                            rawStartMs,
+                                                            (120f / pxPerMs).toLong().coerceIn(40L, 1000L)
+                                                        )?.first ?: rawStartMs
+                                                        if (snappedStartMs != clip.startTimeMs) {
+                                                            viewModel.moveClip(clip.id, snappedStartMs)
                                                         }
                                                         draggingClipId = null
                                                         dragDeltaPx = 0f
+                                                        snapGuideTimeMs = null
                                                     },
                                                     onDragCancel = {
                                                         draggingClipId = null
                                                         dragDeltaPx = 0f
+                                                        snapGuideTimeMs = null
                                                     },
                                                     onDrag = { _, dragAmount ->
                                                         dragDeltaPx += dragAmount.x
+                                                        val rawStartMs = (clip.startTimeMs + (dragDeltaPx / pxPerMs).toLong()).coerceAtLeast(0L)
+                                                        snapGuideTimeMs = viewModel.findTimelineSnap(
+                                                            clip.id,
+                                                            rawStartMs,
+                                                            (120f / pxPerMs).toLong().coerceIn(40L, 1000L)
+                                                        )?.second
                                                     }
                                                 )
                                             }
@@ -1198,6 +1218,17 @@ fun StudioScreen(
                                 }
                             }
                         }
+                    }
+
+                    // Magnetic alignment guide shown while a clip is being dragged.
+                    snapGuideTimeMs?.let { guideTimeMs ->
+                        Box(
+                            modifier = Modifier
+                                .offset(x = (guideTimeMs * dpPerMs).dp)
+                                .width(1.dp)
+                                .fillMaxHeight()
+                                .background(Color.White.copy(alpha = 0.9f))
+                        )
                     }
 
                     // --- PLAYHEAD (Purple vertical line with top triangle indicator) ---
