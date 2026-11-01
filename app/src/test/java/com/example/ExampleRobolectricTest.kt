@@ -416,7 +416,7 @@ class ExampleRobolectricTest {
     val clips = vm.currentProject.value!!.clips
     assertEquals(3, clips.size)
     assertEquals(2000L, clips.first { it.id == clipUnderPlayhead.id }.durationMs)
-    assertTrue(clips.any { it.name == "Target (Part 2)" && it.startTimeMs == 5000L })
+    assertEquals(true, clips.any { it.name == "Target (Part 2)" && it.startTimeMs == 5000L })
     assertEquals("Target (Part 2)", clips.first { it.id == vm.selectedClipId.value }.name)
   }
 
