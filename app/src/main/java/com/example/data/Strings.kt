@@ -97,6 +97,9 @@ object Strings {
             "duration" -> if (tr) "Süre" else "Duration"
             "move_left" -> if (tr) "Sola Taşı" else "Move Left"
             "move_right" -> if (tr) "Sağa Taşı" else "Move Right"
+            "select" -> if (tr) "Seç" else "Select"
+            "move_to_track" -> if (tr) "Piste Taşı" else "Move to"
+
             "step_back" -> if (tr) "1s Geri" else "1s Back"
             "step_forward" -> if (tr) "1s İleri" else "1s Forward"
             "split_at_playhead" -> if (tr) "İmleçte Böl" else "Split at Playhead"
