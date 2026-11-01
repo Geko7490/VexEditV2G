@@ -356,6 +356,36 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         projectRepo.saveProject(updatedProject)
     }
 
+    /**
+     * Moves a media clip to another compatible track without changing its timeline position.
+     * Video/photo media stays on video tracks; audio can move between audio lanes.
+     */
+    fun moveClipToTrack(clipId: String, targetTrackId: String) {
+        val project = _currentProject.value ?: return
+        val clip = project.clips.find { it.id == clipId } ?: return
+        val targetTrack = project.tracks.find { it.id == targetTrackId } ?: return
+        if (clip.trackId == targetTrackId) return
+
+        val compatible = when (clip.mediaType) {
+            MediaType.AUDIO -> targetTrack.type == TrackType.AUDIO_MUSIC ||
+                targetTrack.type == TrackType.AUDIO_VOICE ||
+                targetTrack.type == TrackType.AUDIO_SFX
+            MediaType.VIDEO, MediaType.PHOTO -> targetTrack.type == TrackType.VIDEO
+        }
+        if (!compatible) return
+
+        pushUndoState(project)
+        val updatedClips = project.clips.map {
+            if (it.id == clipId) it.copy(trackId = targetTrack.id, trackType = targetTrack.type) else it
+        }
+        val maxEnd = updatedClips.maxOfOrNull { it.startTimeMs + it.durationMs } ?: 0L
+        val updatedProject = project.copy(clips = updatedClips, durationMs = maxEnd)
+        _currentProject.value = updatedProject
+        _selectedClipId.value = clipId
+        projectRepo.saveProject(updatedProject)
+        syncPlayerToPlayhead(_playheadPositionMs.value)
+    }
+
     fun moveClipToIndex(clipId: String, targetIndex: Int) {
         val project = _currentProject.value ?: return
         val clip = project.clips.find { it.id == clipId } ?: return
