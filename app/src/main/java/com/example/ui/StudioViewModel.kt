@@ -360,7 +360,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
      * Moves a media clip to another compatible track without changing its timeline position.
      * Video/photo media stays on video tracks; audio can move between audio lanes.
      */
-    fun moveClipToTrack(clipId: String, targetTrackId: String) {
+    fun moveClipToTrack(clipId: String, targetTrackId: String, targetStartMs: Long = -1L) {
         val project = _currentProject.value ?: return
         val clip = project.clips.find { it.id == clipId } ?: return
         val targetTrack = project.tracks.find { it.id == targetTrackId } ?: return
@@ -376,7 +376,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
         pushUndoState(project)
         val updatedClips = project.clips.map {
-            if (it.id == clipId) it.copy(trackId = targetTrack.id, trackType = targetTrack.type) else it
+            if (it.id == clipId) it.copy(trackId = targetTrack.id, trackType = targetTrack.type, startTimeMs = if (targetStartMs >= 0L) targetStartMs else it.startTimeMs) else it
         }
         val maxEnd = updatedClips.maxOfOrNull { it.startTimeMs + it.durationMs } ?: 0L
         val updatedProject = project.copy(clips = updatedClips, durationMs = maxEnd)
