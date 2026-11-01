@@ -625,6 +625,9 @@ fun StudioScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 6.dp, vertical = 3.dp)
                     .horizontalScroll(rememberScrollState()),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
                 if (isMultiSelectMode) {
                     Text(
                         text = "${multiSelectedClipIds.size} ${Strings.get("items_selected", lang)}",
@@ -690,10 +693,6 @@ fun StudioScreen(
                         modifier = Modifier.height(34.dp).testTag("timeline_multi_select_btn")
                     ) { Text(Strings.get("select", lang), fontSize = 11.sp) }
                 }
-
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
                 // Add Media (+)
                 FilledTonalButton(
                     onClick = { onNavigate(Screen.IMPORT_MEDIA) },
