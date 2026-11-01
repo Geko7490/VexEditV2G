@@ -781,4 +781,65 @@ class ExampleRobolectricTest {
   }
 
 
+
+  @Test
+  fun `bulk timeline delete preserves gaps and is undoable as one action`() {
+    val application = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.StudioViewModel(application)
+    val clips = listOf(
+      com.example.data.MediaClip(id = "bulk_a", name = "A", trackId = "track_video_1",
+        trackType = com.example.data.TrackType.VIDEO, startTimeMs = 0L, durationMs = 1000L),
+      com.example.data.MediaClip(id = "bulk_b", name = "B", trackId = "track_video_1",
+        trackType = com.example.data.TrackType.VIDEO, startTimeMs = 3000L, durationMs = 1000L),
+      com.example.data.MediaClip(id = "bulk_c", name = "C", trackId = "track_audio_1",
+        trackType = com.example.data.TrackType.AUDIO_MUSIC, mediaType = com.example.data.MediaType.AUDIO,
+        startTimeMs = 5000L, durationMs = 2000L)
+    )
+    vm.selectProject(com.example.data.Project(
+      id = "bulk_delete_project", title = "Bulk Delete", clips = clips, durationMs = 7000L
+    ))
+
+    vm.deleteClips(setOf("bulk_a", "bulk_c"))
+    assertEquals(listOf("bulk_b"), vm.currentProject.value!!.clips.map { it.id })
+    assertEquals(4000L, vm.currentProject.value!!.durationMs)
+
+    vm.undo()
+    assertEquals(3, vm.currentProject.value!!.clips.size)
+    assertEquals(5000L, vm.currentProject.value!!.clips.first { it.id == "bulk_c" }.startTimeMs)
+    vm.redo()
+    assertEquals(listOf("bulk_b"), vm.currentProject.value!!.clips.map { it.id })
+  }
+
+  @Test
+  fun `bulk move is atomic preserves timing and supports undo redo`() {
+    val application = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.StudioViewModel(application)
+    val clips = listOf(
+      com.example.data.MediaClip(id = "bulk_audio_a", name = "Voice A",
+        mediaType = com.example.data.MediaType.AUDIO, trackId = "track_audio_1",
+        trackType = com.example.data.TrackType.AUDIO_MUSIC, startTimeMs = 1200L, durationMs = 900L),
+      com.example.data.MediaClip(id = "bulk_audio_b", name = "Voice B",
+        mediaType = com.example.data.MediaType.AUDIO, trackId = "track_audio_2",
+        trackType = com.example.data.TrackType.AUDIO_MUSIC, startTimeMs = 4000L, durationMs = 1500L)
+    )
+    vm.selectProject(com.example.data.Project(
+      id = "bulk_move_project", title = "Bulk Move", clips = clips, durationMs = 5500L
+    ))
+
+    assertEquals(true, vm.moveClipsToTrack(setOf("bulk_audio_a", "bulk_audio_b"), "track_audio_voice"))
+    val moved = vm.currentProject.value!!.clips.associateBy { it.id }
+    assertEquals("track_audio_voice", moved["bulk_audio_a"]?.trackId)
+    assertEquals("track_audio_voice", moved["bulk_audio_b"]?.trackId)
+    assertEquals(1200L, moved["bulk_audio_a"]?.startTimeMs)
+    assertEquals(4000L, moved["bulk_audio_b"]?.startTimeMs)
+
+    assertEquals(false, vm.moveClipsToTrack(setOf("bulk_audio_a", "bulk_audio_b"), "track_video_1"))
+    assertEquals("track_audio_voice", vm.currentProject.value!!.clips.first { it.id == "bulk_audio_a" }.trackId)
+    vm.undo()
+    assertEquals("track_audio_1", vm.currentProject.value!!.clips.first { it.id == "bulk_audio_a" }.trackId)
+    vm.redo()
+    assertEquals("track_audio_voice", vm.currentProject.value!!.clips.first { it.id == "bulk_audio_a" }.trackId)
+  }
+
+
 }
