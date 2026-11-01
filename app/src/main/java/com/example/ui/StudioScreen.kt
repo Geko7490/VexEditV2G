@@ -81,6 +81,7 @@ fun StudioScreen(
     val canUndo = viewModel.canUndo.collectAsState().value
     val canRedo = viewModel.canRedo.collectAsState().value
     val playerState by viewModel.player.playerState.collectAsState()
+    val screenWidthDp = LocalConfiguration.current.screenWidthDp
 
     val showExportDialog = viewModel.showExportDialog.collectAsState().value
     val isExporting = viewModel.isExporting.collectAsState().value
@@ -726,7 +727,7 @@ fun StudioScreen(
                 FilledTonalButton(
                     onClick = {
                         val durationMs = project?.durationMs?.coerceAtLeast(1000L) ?: 10000L
-                        val availableWidthDp = (LocalConfiguration.current.screenWidthDp - 110).coerceAtLeast(120)
+                        val availableWidthDp = (screenWidthDp - 110).coerceAtLeast(120)
                         zoomScale = (availableWidthDp.toFloat() / (durationMs * 0.05f)).coerceIn(0.35f, 3.5f)
                     },
                     colors = ButtonDefaults.filledTonalButtonColors(
