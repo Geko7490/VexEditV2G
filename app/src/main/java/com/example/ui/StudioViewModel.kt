@@ -405,7 +405,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         pushUndoState(project)
         val nextNumber = (project.tracks.mapNotNull { track ->
             Regex("^Audio (\\d+)$").matchEntire(track.title)?.groupValues?.get(1)?.toIntOrNull()
-        }.maxOrNull() ?: 1) + 1
+        }.maxOrNull() ?: 0) + 1
         val track = Track(
             id = "track_audio_" + UUID.randomUUID().toString(),
             title = "Audio $nextNumber",
@@ -450,6 +450,11 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                 clip.filePath == first.filePath &&
                 clip.uriString == first.uriString &&
                 clip.speed == first.speed &&
+                clip.volume == first.volume &&
+                clip.audioProperties == first.audioProperties &&
+                clip.transform == first.transform &&
+                clip.keyframes == first.keyframes &&
+                clip.effects == first.effects &&
                 clip.sourceDurationMs == first.sourceDurationMs
         }
         if (!compatible) return false
