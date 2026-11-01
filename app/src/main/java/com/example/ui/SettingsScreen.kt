@@ -31,6 +31,10 @@ fun SettingsScreen(
     val settings = viewModel.settings.collectAsState().value
     val lang = settings.language
 
+    LaunchedEffect(Unit) {
+        viewModel.refreshCacheSize()
+    }
+
     var showClearCacheDialog by remember { mutableStateOf(false) }
     var cacheClearedToast by remember { mutableStateOf(false) }
     var recoverySuccessToast by remember { mutableStateOf(false) }
