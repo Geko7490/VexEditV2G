@@ -542,6 +542,26 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             }
     }
 
+    /** Snap a trim boundary to a neighboring clip edge or the playhead. */
+    fun findTimelineBoundarySnap(
+        clipId: String,
+        proposedBoundaryMs: Long,
+        thresholdMs: Long = 150L
+    ): Long? {
+        val project = _currentProject.value ?: return null
+        if (project.clips.none { it.id == clipId }) return null
+        val threshold = thresholdMs.coerceAtLeast(0L)
+        if (threshold == 0L) return null
+
+        return project.clips
+            .filterNot { it.id == clipId }
+            .flatMap { other -> listOf(other.startTimeMs, other.startTimeMs + other.durationMs) }
+            .plus(_playheadPositionMs.value)
+            .distinct()
+            .filter { kotlin.math.abs(it - proposedBoundaryMs) <= threshold }
+            .minByOrNull { kotlin.math.abs(it - proposedBoundaryMs) }
+    }
+
     fun duplicateClip(clipId: String) {
         val project = _currentProject.value ?: return
         val clip = project.clips.find { it.id == clipId } ?: return
