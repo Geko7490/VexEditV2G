@@ -37,6 +37,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -720,6 +721,22 @@ fun StudioScreen(
                     modifier = Modifier.height(30.dp).testTag("timeline_snap_toggle")
                 ) {
                     Text("SNAP", fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                }
+
+                FilledTonalButton(
+                    onClick = {
+                        val durationMs = project?.durationMs?.coerceAtLeast(1000L) ?: 10000L
+                        val availableWidthDp = (LocalConfiguration.current.screenWidthDp - 110).coerceAtLeast(120)
+                        zoomScale = (availableWidthDp.toFloat() / (durationMs * 0.05f)).coerceIn(0.35f, 3.5f)
+                    },
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = VexPanelElevated,
+                        contentColor = VexTextPrimary
+                    ),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                    modifier = Modifier.height(30.dp).testTag("timeline_zoom_fit_btn")
+                ) {
+                    Text("FIT", fontSize = 9.sp, fontWeight = FontWeight.Bold)
                 }
 
                 // Zoom Out
