@@ -657,16 +657,21 @@ fun StudioScreen(
                             Text("Move to", fontSize = 11.sp)
                         }
                         DropdownMenu(expanded = bulkMoveMenuExpanded, onDismissRequest = { bulkMoveMenuExpanded = false }) {
+                            val selectedClips = project?.clips?.filter { it.id in multiSelectedClipIds } ?: emptyList()
                             (project?.tracks ?: emptyList()).forEach { target ->
+                                val acceptsSelection = selectedClips.isNotEmpty() && selectedClips.all { clip ->
+                                    when (clip.mediaType) {
+                                        MediaType.AUDIO -> target.type in listOf(TrackType.AUDIO_MUSIC, TrackType.AUDIO_VOICE, TrackType.AUDIO_SFX)
+                                        MediaType.VIDEO, MediaType.PHOTO -> target.type == TrackType.VIDEO
+                                    }
+                                }
                                 DropdownMenuItem(
                                     text = { Text(target.title, fontSize = 12.sp) },
                                     onClick = {
                                         viewModel.moveClipsToTrack(multiSelectedClipIds, target.id)
                                         bulkMoveMenuExpanded = false
                                     },
-                                    enabled = multiSelectedClipIds.any { id ->
-                                        project?.clips?.any { it.id == id && it.trackId != target.id } == true
-                                    }
+                                    enabled = acceptsSelection && selectedClips.any { it.trackId != target.id }
                                 )
                             }
                         }
@@ -707,7 +712,7 @@ fun StudioScreen(
                 // Split at Playhead (Scissors)
                 FilledTonalButton(
                     onClick = { viewModel.splitClipAtPlayhead() },
-                    enabled = canSplitAtPlayhead || (project?.clips?.any { playheadMs > it.startTimeMs + 200L && playheadMs < (it.startTimeMs + it.durationMs - 200L) } == true),
+                    enabled = !isMultiSelectMode && (canSplitAtPlayhead || (project?.clips?.any { playheadMs > it.startTimeMs + 200L && playheadMs < (it.startTimeMs + it.durationMs - 200L) } == true)),
                     colors = ButtonDefaults.filledTonalButtonColors(
                         containerColor = VexPanelElevated,
                         contentColor = if (canSplitAtPlayhead) VexAccent else VexTextMuted
@@ -723,7 +728,7 @@ fun StudioScreen(
                 // Duplicate
                 FilledTonalButton(
                     onClick = { selectedClip?.let { viewModel.duplicateClip(it.id) } },
-                    enabled = selectedClip != null,
+                    enabled = !isMultiSelectMode && selectedClip != null,
                     colors = ButtonDefaults.filledTonalButtonColors(
                         containerColor = VexPanelElevated,
                         contentColor = if (selectedClip != null) VexTextPrimary else VexTextMuted
@@ -755,7 +760,7 @@ fun StudioScreen(
                 // Move Left in Sequence
                 IconButton(
                     onClick = { selectedClip?.let { viewModel.moveClipLeft(it.id) } },
-                    enabled = selectedClip != null,
+                    enabled = !isMultiSelectMode && selectedClip != null,
                     modifier = Modifier.size(34.dp).testTag("timeline_move_left_btn")
                 ) {
                     Icon(
@@ -769,7 +774,7 @@ fun StudioScreen(
                 // Move Right in Sequence
                 IconButton(
                     onClick = { selectedClip?.let { viewModel.moveClipRight(it.id) } },
-                    enabled = selectedClip != null,
+                    enabled = !isMultiSelectMode && selectedClip != null,
                     modifier = Modifier.size(34.dp).testTag("timeline_move_right_btn")
                 ) {
                     Icon(
