@@ -399,6 +399,26 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         return track.id
     }
 
+    /** Adds an additional editable audio lane without disturbing existing audio clips. */
+    fun addAudioTrack(): String? {
+        val project = _currentProject.value ?: return null
+        pushUndoState(project)
+        val nextNumber = (project.tracks.mapNotNull { track ->
+            Regex("^Audio (\\d+)$").matchEntire(track.title)?.groupValues?.get(1)?.toIntOrNull()
+        }.maxOrNull() ?: 1) + 1
+        val track = Track(
+            id = "track_audio_" + UUID.randomUUID().toString(),
+            title = "Audio $nextNumber",
+            subtitle = "Audio",
+            type = TrackType.AUDIO_MUSIC
+        )
+        val updated = project.copy(tracks = project.tracks + track)
+        _currentProject.value = updated
+        projectRepo.saveProject(updated)
+        updateUndoRedoStates()
+        return track.id
+    }
+
     /** Removes only an empty video lane so media can never be silently discarded. */
     fun removeEmptyVideoTrack(trackId: String): Boolean {
         val project = _currentProject.value ?: return false
