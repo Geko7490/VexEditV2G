@@ -833,11 +833,12 @@ fun StudioScreen(
                                 .padding(horizontal = 6.dp, vertical = 4.dp),
                             contentAlignment = Alignment.CenterStart
                         ) {
-                            Column {
+                            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
                                 Text(
                                     text = track.subtitle.ifEmpty { track.type.label },
                                     color = VexTextSecondary,
-                                    fontSize = 9.sp
+                                    fontSize = 9.sp,
+                                    maxLines = 1
                                 )
                                 Text(
                                     text = track.title,
@@ -847,6 +848,45 @@ fun StudioScreen(
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
+                                if (track.type == TrackType.AUDIO_MUSIC ||
+                                    track.type == TrackType.AUDIO_VOICE ||
+                                    track.type == TrackType.AUDIO_SFX
+                                ) {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                                        Box(
+                                            modifier = Modifier
+                                                .width(22.dp)
+                                                .height(15.dp)
+                                                .clip(RoundedCornerShape(3.dp))
+                                                .background(if (track.isMuted) VexMeterRed.copy(alpha = 0.28f) else VexPanelElevated)
+                                                .clickable { viewModel.toggleTrackMute(track.id) },
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = "M",
+                                                color = if (track.isMuted) VexMeterRed else VexTextSecondary,
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                        Box(
+                                            modifier = Modifier
+                                                .width(22.dp)
+                                                .height(15.dp)
+                                                .clip(RoundedCornerShape(3.dp))
+                                                .background(if (track.isSolo) VexAccent.copy(alpha = 0.28f) else VexPanelElevated)
+                                                .clickable { viewModel.toggleTrackSolo(track.id) },
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = "S",
+                                                color = if (track.isSolo) VexAccentLight else VexTextSecondary,
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
