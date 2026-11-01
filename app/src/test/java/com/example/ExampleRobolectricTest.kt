@@ -888,6 +888,50 @@ class ExampleRobolectricTest {
 
 
   @Test
+  fun `bulk timeline shift preserves spacing clamps at zero and supports undo redo`() {
+    val application = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.StudioViewModel(application)
+    val clips = listOf(
+      com.example.data.MediaClip(
+        id = "shift_a", name = "A", trackId = "track_video_1",
+        trackType = com.example.data.TrackType.VIDEO, startTimeMs = 500L, durationMs = 1000L
+      ),
+      com.example.data.MediaClip(
+        id = "shift_b", name = "B", trackId = "track_audio_1",
+        trackType = com.example.data.TrackType.AUDIO_MUSIC, mediaType = com.example.data.MediaType.AUDIO,
+        startTimeMs = 3500L, durationMs = 800L
+      ),
+      com.example.data.MediaClip(
+        id = "shift_unselected", name = "Keep", trackId = "track_video_1",
+        trackType = com.example.data.TrackType.VIDEO, startTimeMs = 7000L, durationMs = 500L
+      )
+    )
+    vm.selectProject(com.example.data.Project(
+      id = "bulk_shift_project", title = "Bulk Shift", clips = clips, durationMs = 7500L
+    ))
+
+    assertEquals(true, vm.moveClipsByDelta(setOf("shift_a", "shift_b"), 1000L))
+    var updated = vm.currentProject.value!!.clips.associateBy { it.id }
+    assertEquals(1500L, updated["shift_a"]?.startTimeMs)
+    assertEquals(4500L, updated["shift_b"]?.startTimeMs)
+    assertEquals(7000L, updated["shift_unselected"]?.startTimeMs)
+
+    assertEquals(true, vm.moveClipsByDelta(setOf("shift_a", "shift_b"), -3000L))
+    updated = vm.currentProject.value!!.clips.associateBy { it.id }
+    assertEquals(0L, updated["shift_a"]?.startTimeMs)
+    assertEquals(3000L, updated["shift_b"]?.startTimeMs)
+
+    vm.undo()
+    updated = vm.currentProject.value!!.clips.associateBy { it.id }
+    assertEquals(1500L, updated["shift_a"]?.startTimeMs)
+    assertEquals(4500L, updated["shift_b"]?.startTimeMs)
+    vm.redo()
+    updated = vm.currentProject.value!!.clips.associateBy { it.id }
+    assertEquals(0L, updated["shift_a"]?.startTimeMs)
+    assertEquals(3000L, updated["shift_b"]?.startTimeMs)
+  }
+
+  @Test
   fun `trim start safely ignores attempts to shorten malformed subminimum clips`() {
     val application = ApplicationProvider.getApplicationContext<android.app.Application>()
     val vm = com.example.ui.StudioViewModel(application)
