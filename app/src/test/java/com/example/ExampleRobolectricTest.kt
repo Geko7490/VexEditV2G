@@ -418,6 +418,10 @@ class ExampleRobolectricTest {
     assertEquals(5000L, endSnap?.second)
 
     assertNull(vm.findTimelineSnap(moving.id, 20000L, 100L))
+
+    assertEquals(5000L, vm.findTimelineBoundarySnap(moving.id, 4920L, 120L))
+    assertEquals(5000L, vm.findTimelineBoundarySnap(moving.id, 5080L, 120L))
+    assertNull(vm.findTimelineBoundarySnap(moving.id, 20000L, 100L))
   }
 
   @Test
