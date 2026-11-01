@@ -91,6 +91,7 @@ fun StudioScreen(
     var activeTool by remember { mutableStateOf<String?>(null) }
     var saveFeedback by remember { mutableStateOf(false) }
     var zoomScale by remember { mutableFloatStateOf(1.0f) }
+    var isSnappingEnabled by remember { mutableStateOf(true) }
     var draggingClipId by remember { mutableStateOf<String?>(null) }
     var dragDeltaPx by remember { mutableFloatStateOf(0f) }
     var dragDeltaYPx by remember { mutableFloatStateOf(0f) }
@@ -709,6 +710,18 @@ fun StudioScreen(
 
                 Spacer(modifier = Modifier.width(6.dp))
 
+                FilledTonalButton(
+                    onClick = { isSnappingEnabled = !isSnappingEnabled },
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = if (isSnappingEnabled) VexAccent.copy(alpha = 0.22f) else VexPanelElevated,
+                        contentColor = if (isSnappingEnabled) VexAccentLight else VexTextSecondary
+                    ),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                    modifier = Modifier.height(30.dp).testTag("timeline_snap_toggle")
+                ) {
+                    Text("SNAP", fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                }
+
                 // Zoom Out
                 IconButton(
                     onClick = { zoomScale = (zoomScale / 1.3f).coerceAtLeast(0.35f) },
@@ -967,7 +980,7 @@ fun StudioScreen(
                                     }
 
                                     val rawDraggedStartMs = (clip.startTimeMs + (dragDeltaPx / pxPerMs).toLong()).coerceAtLeast(0L)
-                                    val snappedDrag = if (isDraggingThis) {
+                                    val snappedDrag = if (isDraggingThis && isSnappingEnabled) {
                                         viewModel.findTimelineSnap(
                                             clip.id,
                                             rawDraggedStartMs,
@@ -1015,11 +1028,13 @@ fun StudioScreen(
                                                     },
                                                     onDragEnd = {
                                                         val rawStartMs = (clip.startTimeMs + (dragDeltaPx / pxPerMs).toLong()).coerceAtLeast(0L)
-                                                        val snappedStartMs = viewModel.findTimelineSnap(
-                                                            clip.id,
-                                                            rawStartMs,
-                                                            (120f / pxPerMs).toLong().coerceIn(40L, 1000L)
-                                                        )?.first ?: rawStartMs
+                                                        val snappedStartMs = if (isSnappingEnabled) {
+                                                            viewModel.findTimelineSnap(
+                                                                clip.id,
+                                                                rawStartMs,
+                                                                (120f / pxPerMs).toLong().coerceIn(40L, 1000L)
+                                                            )?.first ?: rawStartMs
+                                                        } else rawStartMs
                                                         val rowHeightPx = with(density) { 50.dp.toPx() }
                                                         val rowDelta = kotlin.math.round(dragDeltaYPx / rowHeightPx).toInt()
                                                         val targetTrackIndex = (sourceTrackIndex + rowDelta).coerceIn(tracks.indices)
@@ -1044,11 +1059,13 @@ fun StudioScreen(
                                                         dragDeltaPx += dragAmount.x
                                                         dragDeltaYPx += dragAmount.y
                                                         val rawStartMs = (clip.startTimeMs + (dragDeltaPx / pxPerMs).toLong()).coerceAtLeast(0L)
-                                                        snapGuideTimeMs = viewModel.findTimelineSnap(
-                                                            clip.id,
-                                                            rawStartMs,
-                                                            (120f / pxPerMs).toLong().coerceIn(40L, 1000L)
-                                                        )?.second
+                                                        snapGuideTimeMs = if (isSnappingEnabled) {
+                                                            viewModel.findTimelineSnap(
+                                                                clip.id,
+                                                                rawStartMs,
+                                                                (120f / pxPerMs).toLong().coerceIn(40L, 1000L)
+                                                            )?.second
+                                                        } else null
                                                     }
                                                 )
                                             }
@@ -1164,11 +1181,13 @@ fun StudioScreen(
                                                                 )
                                                                 val clampedDeltaMs = deltaMs.coerceIn(minDelta, maxDelta)
                                                                 val proposedStartMs = (session.initialStartTimeMs + clampedDeltaMs).coerceAtLeast(0L)
-                                                                val snapBoundaryMs = viewModel.findTimelineBoundarySnap(
-                                                                    clip.id,
-                                                                    proposedStartMs,
-                                                                    (120f / pxPerMs).toLong().coerceIn(40L, 1000L)
-                                                                )
+                                                                val snapBoundaryMs = if (isSnappingEnabled) {
+                                                                    viewModel.findTimelineBoundarySnap(
+                                                                        clip.id,
+                                                                        proposedStartMs,
+                                                                        (120f / pxPerMs).toLong().coerceIn(40L, 1000L)
+                                                                    )
+                                                                } else null
                                                                 val snappedDeltaMs = if (snapBoundaryMs != null) {
                                                                     (snapBoundaryMs - session.initialStartTimeMs).coerceIn(minDelta, maxDelta)
                                                                 } else clampedDeltaMs
@@ -1266,11 +1285,13 @@ fun StudioScreen(
                                                                 }
                                                                 val targetDuration = (session.initialDurationMs + deltaMs).coerceIn(300L, maxAllowedDuration)
                                                                 val proposedEndMs = session.initialStartTimeMs + targetDuration
-                                                                val snapBoundaryMs = viewModel.findTimelineBoundarySnap(
-                                                                    clip.id,
-                                                                    proposedEndMs,
-                                                                    (120f / pxPerMs).toLong().coerceIn(40L, 1000L)
-                                                                )
+                                                                val snapBoundaryMs = if (isSnappingEnabled) {
+                                                                    viewModel.findTimelineBoundarySnap(
+                                                                        clip.id,
+                                                                        proposedEndMs,
+                                                                        (120f / pxPerMs).toLong().coerceIn(40L, 1000L)
+                                                                    )
+                                                                } else null
                                                                 val snappedDuration = if (snapBoundaryMs != null) {
                                                                     (snapBoundaryMs - session.initialStartTimeMs).coerceIn(300L, maxAllowedDuration)
                                                                 } else targetDuration
