@@ -869,6 +869,41 @@ class ExampleRobolectricTest {
   }
 
   @Test
+  fun `additional audio lane creation is undoable and keeps existing clips`() {
+    val application = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.StudioViewModel(application)
+    val existing = com.example.data.MediaClip(
+      id = "audio_lane_existing", name = "Music", mediaType = com.example.data.MediaType.AUDIO,
+      trackId = "track_audio_1", trackType = com.example.data.TrackType.AUDIO_MUSIC,
+      startTimeMs = 1200L, durationMs = 3000L
+    )
+    vm.selectProject(com.example.data.Project(
+      id = "audio_lane_project", title = "Audio lanes", clips = listOf(existing), durationMs = 4200L
+    ))
+
+    val newTrackId = vm.addAudioTrack()
+    assertNotNull(newTrackId)
+    assertEquals(4, vm.currentProject.value!!.tracks.count {
+      it.type == com.example.data.TrackType.AUDIO_MUSIC ||
+        it.type == com.example.data.TrackType.AUDIO_VOICE ||
+        it.type == com.example.data.TrackType.AUDIO_SFX
+    })
+    assertEquals("track_audio_1", vm.currentProject.value!!.clips.single().trackId)
+    vm.undo()
+    assertEquals(3, vm.currentProject.value!!.tracks.count {
+      it.type == com.example.data.TrackType.AUDIO_MUSIC ||
+        it.type == com.example.data.TrackType.AUDIO_VOICE ||
+        it.type == com.example.data.TrackType.AUDIO_SFX
+    })
+    vm.redo()
+    assertEquals(4, vm.currentProject.value!!.tracks.count {
+      it.type == com.example.data.TrackType.AUDIO_MUSIC ||
+        it.type == com.example.data.TrackType.AUDIO_VOICE ||
+        it.type == com.example.data.TrackType.AUDIO_SFX
+    })
+  }
+
+  @Test
   fun `merge joins only contiguous pieces from same source and supports undo redo`() {
     val application = ApplicationProvider.getApplicationContext<android.app.Application>()
     val vm = com.example.ui.StudioViewModel(application)
