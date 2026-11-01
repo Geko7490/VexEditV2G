@@ -93,6 +93,7 @@ fun StudioScreen(
     var zoomScale by remember { mutableFloatStateOf(1.0f) }
     var draggingClipId by remember { mutableStateOf<String?>(null) }
     var dragDeltaPx by remember { mutableFloatStateOf(0f) }
+    var dragDeltaYPx by remember { mutableFloatStateOf(0f) }
     var snapGuideTimeMs by remember { mutableStateOf<Long?>(null) }
     var activeTrimmingInfo by remember { mutableStateOf<String?>(null) }
     var activeTrimSession by remember { mutableStateOf<ActiveTrimSession?>(null) }
@@ -914,6 +915,7 @@ fun StudioScreen(
                     Column(modifier = Modifier.width(timelineWidth)) {
                         val tracks = project?.tracks ?: Project.defaultTracks()
                         tracks.forEach { track ->
+                            val sourceTrackIndex = tracks.indexOfFirst { it.id == track.id }
                             val trackClips = project?.clips?.filter { it.trackId == track.id }?.sortedBy { it.startTimeMs } ?: emptyList()
 
                             Box(
@@ -963,7 +965,10 @@ fun StudioScreen(
 
                                     Box(
                                         modifier = Modifier
-                                            .offset(x = leftOffset)
+                                            .offset(
+                                                x = leftOffset,
+                                                y = if (isDraggingThis) with(density) { dragDeltaYPx.toDp() } else 0.dp
+                                            )
                                             .width(clipWidth)
                                             .fillMaxHeight()
                                             .padding(vertical = 3.dp)
@@ -985,11 +990,12 @@ fun StudioScreen(
                                                 shape = RoundedCornerShape(4.dp)
                                             )
                                             .clickable { viewModel.selectClip(clip.id) }
-                                            .pointerInput(clip.id, pxPerMs) {
+                                            .pointerInput(clip.id, pxPerMs, track.id, tracks.size) {
                                                 detectDragGesturesAfterLongPress(
                                                     onDragStart = {
                                                         draggingClipId = clip.id
                                                         dragDeltaPx = 0f
+                                                        dragDeltaYPx = 0f
                                                         viewModel.selectClip(clip.id)
                                                     },
                                                     onDragEnd = {
@@ -999,20 +1005,32 @@ fun StudioScreen(
                                                             rawStartMs,
                                                             (120f / pxPerMs).toLong().coerceIn(40L, 1000L)
                                                         )?.first ?: rawStartMs
-                                                        if (snappedStartMs != clip.startTimeMs) {
+                                                        val rowHeightPx = with(density) { 50.dp.toPx() }
+                                                        val rowDelta = (dragDeltaYPx / rowHeightPx).let { kotlin.math.roundToInt(it) }
+                                                        val targetTrackIndex = (sourceTrackIndex + rowDelta).coerceIn(tracks.indices)
+                                                        val targetTrack = tracks.getOrNull(targetTrackIndex)
+                                                        if (targetTrack != null && targetTrack.id != track.id) {
+                                                            viewModel.moveClipToTrack(clip.id, targetTrack.id)
+                                                            if (snappedStartMs != clip.startTimeMs) {
+                                                                viewModel.moveClip(clip.id, snappedStartMs)
+                                                            }
+                                                        } else if (snappedStartMs != clip.startTimeMs) {
                                                             viewModel.moveClip(clip.id, snappedStartMs)
                                                         }
                                                         draggingClipId = null
                                                         dragDeltaPx = 0f
+                                                        dragDeltaYPx = 0f
                                                         snapGuideTimeMs = null
                                                     },
                                                     onDragCancel = {
                                                         draggingClipId = null
                                                         dragDeltaPx = 0f
+                                                        dragDeltaYPx = 0f
                                                         snapGuideTimeMs = null
                                                     },
                                                     onDrag = { _, dragAmount ->
                                                         dragDeltaPx += dragAmount.x
+                                                        dragDeltaYPx += dragAmount.y
                                                         val rawStartMs = (clip.startTimeMs + (dragDeltaPx / pxPerMs).toLong()).coerceAtLeast(0L)
                                                         snapGuideTimeMs = viewModel.findTimelineSnap(
                                                             clip.id,
