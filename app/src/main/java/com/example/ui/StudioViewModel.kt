@@ -768,14 +768,21 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     fun setClipSpeed(clipId: String, speed: Float) {
         val project = _currentProject.value ?: return
         val clip = project.clips.find { it.id == clipId } ?: return
+        val safeSpeed = if (speed.isFinite()) speed.coerceIn(0.25f, 4f) else 1f
+        if (clip.speed == safeSpeed) return
+
         pushUndoState(project)
-        val oldSpeed = clip.speed
-        val newDuration = (clip.durationMs * (oldSpeed / speed)).toLong().coerceAtLeast(500L)
-        val updated = clip.copy(speed = speed, durationMs = newDuration)
+        val oldSpeed = clip.speed.takeIf { it.isFinite() && it > 0f } ?: 1f
+        val newDuration = (clip.durationMs * (oldSpeed / safeSpeed))
+            .toLong()
+            .coerceAtLeast(500L)
+        val updated = clip.copy(speed = safeSpeed, durationMs = newDuration)
         val updatedClips = project.clips.map { if (it.id == clipId) updated else it }
-        val updatedProject = project.copy(clips = updatedClips)
+        val maxEnd = updatedClips.maxOfOrNull { it.startTimeMs + it.durationMs } ?: 0L
+        val updatedProject = project.copy(clips = updatedClips, durationMs = maxEnd)
         _currentProject.value = updatedProject
         projectRepo.saveProject(updatedProject)
+        syncPlayerToPlayhead(_playheadPositionMs.value)
     }
 
     fun setClipVolume(clipId: String, volume: Float) {
