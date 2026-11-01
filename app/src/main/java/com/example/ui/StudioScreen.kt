@@ -1002,7 +1002,7 @@ fun StudioScreen(
                                         viewModel.findTimelineSnap(
                                             clip.id,
                                             rawDraggedStartMs,
-                                            (120f / pxPerMs).toLong().coerceIn(40L, 1000L)
+                                            (28f / pxPerMs).toLong().coerceIn(40L, 1000L)
                                         )
                                     } else null
                                     val visualStartMs = if (isDraggingThis) snappedDrag?.first ?: rawDraggedStartMs else effectiveStartMs
@@ -1050,7 +1050,7 @@ fun StudioScreen(
                                                             viewModel.findTimelineSnap(
                                                                 clip.id,
                                                                 rawStartMs,
-                                                                (120f / pxPerMs).toLong().coerceIn(40L, 1000L)
+                                                                (28f / pxPerMs).toLong().coerceIn(40L, 1000L)
                                                             )?.first ?: rawStartMs
                                                         } else rawStartMs
                                                         val rowHeightPx = with(density) { 50.dp.toPx() }
@@ -1081,7 +1081,7 @@ fun StudioScreen(
                                                             viewModel.findTimelineSnap(
                                                                 clip.id,
                                                                 rawStartMs,
-                                                                (120f / pxPerMs).toLong().coerceIn(40L, 1000L)
+                                                                (28f / pxPerMs).toLong().coerceIn(40L, 1000L)
                                                             )?.second
                                                         } else null
                                                     }
@@ -1203,7 +1203,7 @@ fun StudioScreen(
                                                                     viewModel.findTimelineBoundarySnap(
                                                                         clip.id,
                                                                         proposedStartMs,
-                                                                        (120f / pxPerMs).toLong().coerceIn(40L, 1000L)
+                                                                        (28f / pxPerMs).toLong().coerceIn(40L, 1000L)
                                                                     )
                                                                 } else null
                                                                 val snappedDeltaMs = if (snapBoundaryMs != null) {
@@ -1307,7 +1307,7 @@ fun StudioScreen(
                                                                     viewModel.findTimelineBoundarySnap(
                                                                         clip.id,
                                                                         proposedEndMs,
-                                                                        (120f / pxPerMs).toLong().coerceIn(40L, 1000L)
+                                                                        (28f / pxPerMs).toLong().coerceIn(40L, 1000L)
                                                                     )
                                                                 } else null
                                                                 val snappedDuration = if (snapBoundaryMs != null) {
