@@ -554,6 +554,56 @@ class ExampleRobolectricTest {
 
 
   @Test
+  fun `trimming clip end ripples later clips on same track only`() {
+    val application = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.StudioViewModel(application)
+    val tracks = Project.defaultTracks()
+    val audioTrack = tracks.first { it.type == com.example.data.TrackType.AUDIO_MUSIC }
+    val otherAudioTrack = tracks.first { it.type == com.example.data.TrackType.AUDIO_VOICE }
+    val first = com.example.data.MediaClip(
+      id = "trim_ripple_first",
+      name = "First",
+      mediaType = com.example.data.MediaType.AUDIO,
+      trackId = audioTrack.id,
+      trackType = audioTrack.type,
+      startTimeMs = 0L,
+      durationMs = 2000L
+    )
+    val laterSameLane = com.example.data.MediaClip(
+      id = "trim_ripple_later",
+      name = "Later",
+      mediaType = com.example.data.MediaType.AUDIO,
+      trackId = audioTrack.id,
+      trackType = audioTrack.type,
+      startTimeMs = 3000L,
+      durationMs = 1000L
+    )
+    val otherLane = com.example.data.MediaClip(
+      id = "trim_ripple_other",
+      name = "Other Lane",
+      mediaType = com.example.data.MediaType.AUDIO,
+      trackId = otherAudioTrack.id,
+      trackType = otherAudioTrack.type,
+      startTimeMs = 3000L,
+      durationMs = 1000L
+    )
+    vm.selectProject(Project(
+      id = "trim_ripple_project",
+      title = "Trim Ripple",
+      tracks = tracks,
+      clips = listOf(first, laterSameLane, otherLane),
+      durationMs = 4000L
+    ))
+
+    vm.trimClipEnd(first.id, 500L)
+
+    val clips = vm.currentProject.value!!.clips.associateBy { it.id }
+    assertEquals(2500L, clips.getValue(first.id).durationMs)
+    assertEquals(3500L, clips.getValue(laterSameLane.id).startTimeMs)
+    assertEquals(3000L, clips.getValue(otherLane.id).startTimeMs)
+  }
+
+  @Test
   fun `reordering timeline tracks keeps clips attached and supports undo`() {
     val application = ApplicationProvider.getApplicationContext<android.app.Application>()
     val vm = com.example.ui.StudioViewModel(application)
