@@ -855,6 +855,57 @@ class ExampleRobolectricTest {
   }
 
   @Test
+  fun `video lane creation is undoable and empty lanes can be removed safely`() {
+    val application = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.StudioViewModel(application)
+    vm.selectProject(com.example.data.Project(id = "video_lane_project", title = "Video lanes"))
+
+    val newTrackId = vm.addVideoTrack()
+    assertNotNull(newTrackId)
+    assertEquals(2, vm.currentProject.value!!.tracks.count { it.type == com.example.data.TrackType.VIDEO })
+    assertEquals(true, vm.removeEmptyVideoTrack(newTrackId!!))
+    assertEquals(1, vm.currentProject.value!!.tracks.count { it.type == com.example.data.TrackType.VIDEO })
+    assertEquals(false, vm.removeEmptyVideoTrack("track_video_1"))
+  }
+
+  @Test
+  fun `merge joins only contiguous pieces from same source and supports undo redo`() {
+    val application = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.StudioViewModel(application)
+    val first = com.example.data.MediaClip(
+      id = "merge_a", name = "Source", filePath = "/tmp/source.mp4",
+      trackId = "track_video_1", trackType = com.example.data.TrackType.VIDEO,
+      startTimeMs = 1000L, sourceStartMs = 0L, durationMs = 2000L,
+      sourceDurationMs = 10000L
+    )
+    val second = first.copy(
+      id = "merge_b", name = "Source (Part 2)", startTimeMs = 3000L,
+      sourceStartMs = 2000L, durationMs = 1500L
+    )
+    vm.selectProject(com.example.data.Project(
+      id = "merge_project", title = "Merge", clips = listOf(first, second), durationMs = 4500L
+    ))
+
+    assertEquals(true, vm.mergeClips(setOf(first.id, second.id)))
+    val merged = vm.currentProject.value!!.clips.single()
+    assertEquals(1000L, merged.startTimeMs)
+    assertEquals(3500L, merged.durationMs)
+    assertEquals(0L, merged.sourceStartMs)
+
+    vm.undo()
+    assertEquals(2, vm.currentProject.value!!.clips.size)
+    vm.redo()
+    assertEquals(1, vm.currentProject.value!!.clips.size)
+
+    val gap = second.copy(id = "merge_gap", startTimeMs = 3100L)
+    vm.selectProject(com.example.data.Project(
+      id = "merge_gap_project", title = "Merge gap", clips = listOf(first, gap), durationMs = 4600L
+    ))
+    assertEquals(false, vm.mergeClips(setOf(first.id, gap.id)))
+    assertEquals(2, vm.currentProject.value!!.clips.size)
+  }
+
+  @Test
   fun `bulk move is atomic preserves timing and supports undo redo`() {
     val application = ApplicationProvider.getApplicationContext<android.app.Application>()
     val vm = com.example.ui.StudioViewModel(application)
