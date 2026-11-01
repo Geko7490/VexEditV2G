@@ -886,4 +886,38 @@ class ExampleRobolectricTest {
   }
 
 
+
+  @Test
+  fun `trim start safely ignores attempts to shorten malformed subminimum clips`() {
+    val application = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.StudioViewModel(application)
+    val shortClip = com.example.data.MediaClip(
+      id = "short_trim_clip",
+      name = "Short Imported Clip",
+      trackId = "track_video_1",
+      trackType = com.example.data.TrackType.VIDEO,
+      startTimeMs = 0L,
+      sourceStartMs = 0L,
+      durationMs = 200L,
+      sourceDurationMs = 200L
+    )
+    vm.selectProject(com.example.data.Project(
+      id = "short_trim_project",
+      title = "Short Trim",
+      clips = listOf(shortClip),
+      durationMs = 200L
+    ))
+
+    // A 200ms imported clip is already below the editor's 300ms trim minimum.
+    // The operation should safely no-op instead of throwing from an invalid clamp range.
+    vm.trimClipStart(shortClip.id, 50L)
+
+    val unchanged = vm.currentProject.value!!.clips.single()
+    assertEquals(0L, unchanged.startTimeMs)
+    assertEquals(0L, unchanged.sourceStartMs)
+    assertEquals(200L, unchanged.durationMs)
+    assertEquals(200L, vm.currentProject.value!!.durationMs)
+    assertEquals(false, vm.canUndo.value)
+  }
+
 }
