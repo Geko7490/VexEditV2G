@@ -601,6 +601,16 @@ class ExampleRobolectricTest {
     assertEquals(2500L, clips.getValue(first.id).durationMs)
     assertEquals(3500L, clips.getValue(laterSameLane.id).startTimeMs)
     assertEquals(3000L, clips.getValue(otherLane.id).startTimeMs)
+
+    vm.undo()
+    val undone = vm.currentProject.value!!.clips.associateBy { it.id }
+    assertEquals(2000L, undone.getValue(first.id).durationMs)
+    assertEquals(3000L, undone.getValue(laterSameLane.id).startTimeMs)
+
+    vm.redo()
+    val redone = vm.currentProject.value!!.clips.associateBy { it.id }
+    assertEquals(2500L, redone.getValue(first.id).durationMs)
+    assertEquals(3500L, redone.getValue(laterSameLane.id).startTimeMs)
   }
 
   @Test
