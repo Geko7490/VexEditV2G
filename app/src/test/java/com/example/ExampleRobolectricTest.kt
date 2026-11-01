@@ -447,6 +447,11 @@ class ExampleRobolectricTest {
     assertEquals(com.example.data.TrackType.AUDIO_VOICE, moved.trackType)
     assertEquals(1500L, moved.startTimeMs)
 
+    // An audio clip must not be reassigned to a video lane.
+    vm.moveClipToTrack(audioClip.id, "track_video_1", 1800L)
+    assertEquals("track_audio_voice", vm.currentProject.value!!.clips.single().trackId)
+    assertEquals(1500L, vm.currentProject.value!!.clips.single().startTimeMs)
+
     vm.undo()
     val restored = vm.currentProject.value!!.clips.single()
     assertEquals("track_audio_1", restored.trackId)
