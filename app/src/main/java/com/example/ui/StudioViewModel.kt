@@ -311,14 +311,30 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         _canRedo.value = redoStack.isNotEmpty()
     }
 
+    private fun restoreHistoryProject(project: Project) {
+        _currentProject.value = project
+        val playhead = if (project.durationMs > 0L) {
+            _playheadPositionMs.value.coerceIn(0L, project.durationMs)
+        } else {
+            0L
+        }
+        _playheadPositionMs.value = playhead
+        if (project.clips.none { it.id == _selectedClipId.value }) {
+            _selectedClipId.value = project.clips.firstOrNull()?.id
+        }
+        projectRepo.saveProject(project)
+        updateUndoRedoStates()
+        // History restoration changes the media graph as well as the timeline data.
+        // Rebind all active video/audio sources at the restored playhead to avoid stale preview.
+        syncPlayerToPlayhead(playhead)
+    }
+
     fun undo() {
         val current = _currentProject.value ?: return
         if (undoStack.isNotEmpty()) {
             val prev = undoStack.removeAt(undoStack.lastIndex)
             redoStack.add(current)
-            _currentProject.value = prev
-            projectRepo.saveProject(prev)
-            updateUndoRedoStates()
+            restoreHistoryProject(prev)
         }
     }
 
@@ -327,9 +343,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         if (redoStack.isNotEmpty()) {
             val next = redoStack.removeAt(redoStack.lastIndex)
             undoStack.add(current)
-            _currentProject.value = next
-            projectRepo.saveProject(next)
-            updateUndoRedoStates()
+            restoreHistoryProject(next)
         }
     }
 
