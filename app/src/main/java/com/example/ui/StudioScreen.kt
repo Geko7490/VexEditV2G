@@ -627,7 +627,7 @@ fun StudioScreen(
                     .horizontalScroll(rememberScrollState()),
                 if (isMultiSelectMode) {
                     Text(
-                        text = "${multiSelectedClipIds.size} selected",
+                        text = "${multiSelectedClipIds.size} ${Strings.get("items_selected", lang)}",
                         color = VexAccentLight,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
@@ -642,7 +642,7 @@ fun StudioScreen(
                     ) {
                         Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(15.dp))
                         Spacer(Modifier.width(3.dp))
-                        Text("Delete", fontSize = 11.sp)
+                        Text(Strings.get("delete", lang), fontSize = 11.sp)
                     }
                     Box {
                         FilledTonalButton(
@@ -654,7 +654,7 @@ fun StudioScreen(
                         ) {
                             Icon(Icons.Default.DriveFileMove, contentDescription = null, modifier = Modifier.size(15.dp))
                             Spacer(Modifier.width(3.dp))
-                            Text("Move to", fontSize = 11.sp)
+                            Text(Strings.get("move_to_track", lang), fontSize = 11.sp)
                         }
                         DropdownMenu(expanded = bulkMoveMenuExpanded, onDismissRequest = { bulkMoveMenuExpanded = false }) {
                             val selectedClips = project?.clips?.filter { it.id in multiSelectedClipIds } ?: emptyList()
@@ -681,14 +681,14 @@ fun StudioScreen(
                         colors = ButtonDefaults.filledTonalButtonColors(containerColor = VexPanelElevated, contentColor = VexTextSecondary),
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                         modifier = Modifier.height(34.dp)
-                    ) { Text("Done", fontSize = 11.sp) }
+                    ) { Text(Strings.get("close", lang), fontSize = 11.sp) }
                 } else {
                     FilledTonalButton(
                         onClick = { isMultiSelectMode = true; multiSelectedClipIds = selectedClipId?.let { setOf(it) } ?: emptySet() },
                         colors = ButtonDefaults.filledTonalButtonColors(containerColor = VexPanelElevated, contentColor = VexAccentLight),
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                         modifier = Modifier.height(34.dp).testTag("timeline_multi_select_btn")
-                    ) { Text("Select", fontSize = 11.sp) }
+                    ) { Text(Strings.get("select", lang), fontSize = 11.sp) }
                 }
 
                 verticalAlignment = Alignment.CenterVertically,
