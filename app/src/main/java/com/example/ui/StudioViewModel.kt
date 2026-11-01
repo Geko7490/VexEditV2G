@@ -522,8 +522,19 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         if (targetDuration == clip.durationMs) return
 
         pushUndoState(project)
+        val appliedDelta = targetDuration - clip.durationMs
+        val originalEndMs = clip.startTimeMs + clip.durationMs
         val updatedClip = clip.copy(durationMs = targetDuration, sourceDurationMs = sourceDuration)
-        val allClips = project.clips.map { if (it.id == clipId) updatedClip else it }
+        // Match the timeline's live trim preview: clips later on this same lane ripple
+        // by the exact committed edge delta, while clips on other lanes remain untouched.
+        val allClips = project.clips.map { candidate ->
+            when {
+                candidate.id == clipId -> updatedClip
+                candidate.trackId == clip.trackId && candidate.startTimeMs >= originalEndMs ->
+                    candidate.copy(startTimeMs = (candidate.startTimeMs + appliedDelta).coerceAtLeast(0L))
+                else -> candidate
+            }
+        }
         val maxEnd = allClips.maxOfOrNull { it.startTimeMs + it.durationMs } ?: 0L
         val updatedProject = project.copy(clips = allClips, durationMs = maxEnd)
         _currentProject.value = updatedProject
