@@ -390,16 +390,21 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         val project = _currentProject.value ?: return
         val playhead = _playheadPositionMs.value
         val clipId = _selectedClipId.value
+        val selectedClip = project.clips.find { it.id == clipId }
+        val selectedContainsPlayhead = selectedClip?.let {
+            playhead > it.startTimeMs + 200L &&
+                playhead < (it.startTimeMs + it.durationMs - 200L)
+        } == true
 
-        val targetClip = if (clipId != null) {
-            project.clips.find { it.id == clipId }
+        // Prefer the selected clip only when the playhead is actually inside it.
+        // Otherwise split the topmost clip under the playhead instead of silently doing nothing.
+        val targetClip = if (selectedContainsPlayhead) {
+            selectedClip
         } else {
-            project.clips.find { playhead > it.startTimeMs && playhead < (it.startTimeMs + it.durationMs) }
+            project.clips
+                .filter { playhead > it.startTimeMs + 200L && playhead < (it.startTimeMs + it.durationMs - 200L) }
+                .maxByOrNull { it.startTimeMs }
         } ?: return
-
-        if (playhead <= targetClip.startTimeMs + 200L || playhead >= (targetClip.startTimeMs + targetClip.durationMs - 200L)) {
-            return
-        }
 
         pushUndoState(project)
 
