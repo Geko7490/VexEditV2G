@@ -955,4 +955,30 @@ class ExampleRobolectricTest {
     assertEquals(clip.id, vm.selectedClipId.value)
   }
 
+
+  @Test
+  fun `timeline reorder clamps playhead to recalculated project duration`() {
+    val application = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.StudioViewModel(application)
+    val short = com.example.data.MediaClip(
+      id = "reorder_short", name = "Short", trackId = "track_video_1",
+      trackType = com.example.data.TrackType.VIDEO, startTimeMs = 0L, durationMs = 1000L
+    )
+    val long = com.example.data.MediaClip(
+      id = "reorder_long", name = "Long", trackId = "track_video_1",
+      trackType = com.example.data.TrackType.VIDEO, startTimeMs = 5000L, durationMs = 9000L
+    )
+    val project = com.example.data.Project(
+      id = "reorder_playhead_clamp", title = "Reorder Playhead Clamp",
+      clips = listOf(short, long), durationMs = 14000L
+    )
+    vm.projectRepo.saveProject(project)
+    vm.selectProject(project)
+    vm.setPlayheadPosition(12000L)
+
+    vm.reorderTrackClips("track_video_1", 0, 1)
+
+    assertEquals(9000L, vm.currentProject.value?.durationMs)
+    assertEquals(9000L, vm.playheadPositionMs.value)
+  }
 }
