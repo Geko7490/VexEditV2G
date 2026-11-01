@@ -554,6 +554,41 @@ class ExampleRobolectricTest {
 
 
   @Test
+  fun `reordering timeline tracks keeps clips attached and supports undo`() {
+    val application = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.StudioViewModel(application)
+    val tracks = Project.defaultTracks()
+    val clip = com.example.data.MediaClip(
+      id = "track_reorder_clip",
+      name = "Attached Clip",
+      trackId = tracks.first().id,
+      trackType = tracks.first().type,
+      startTimeMs = 1200L,
+      durationMs = 2400L
+    )
+    val project = Project(
+      id = "track_reorder_project",
+      title = "Track Reorder",
+      tracks = tracks,
+      clips = listOf(clip),
+      durationMs = 3600L
+    )
+    vm.selectProject(project)
+
+    vm.reorderTracks(0, 1)
+
+    val reordered = vm.currentProject.value!!
+    assertEquals(tracks[1].id, reordered.tracks[0].id)
+    assertEquals(tracks[0].id, reordered.clips.single().trackId)
+    assertEquals(1200L, reordered.clips.single().startTimeMs)
+
+    vm.undo()
+    val restored = vm.currentProject.value!!
+    assertEquals(tracks.map { it.id }, restored.tracks.map { it.id })
+    assertEquals(tracks[0].id, restored.clips.single().trackId)
+  }
+
+  @Test
   fun `project persistence retains mixer tracks and audio processing settings`() {
     val context = ApplicationProvider.getApplicationContext<Context>()
     val repository = ProjectRepository(context)
