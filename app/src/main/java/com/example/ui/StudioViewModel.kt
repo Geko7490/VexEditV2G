@@ -530,7 +530,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         return anchors
             .flatMap { anchor ->
                 listOf(
-                    proposedStartMs to anchor,
+                    anchor.coerceAtLeast(0L) to anchor,
                     (anchor - clip.durationMs).coerceAtLeast(0L) to anchor
                 )
             }
