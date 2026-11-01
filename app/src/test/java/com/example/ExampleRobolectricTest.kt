@@ -639,6 +639,65 @@ class ExampleRobolectricTest {
   }
 
   @Test
+  fun `timeline track mute and solo toggles persist in project state and undo`() {
+    val application = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.StudioViewModel(application)
+    val tracks = Project.defaultTracks()
+    val audioTrack = tracks.first { it.type == com.example.data.TrackType.AUDIO_MUSIC }
+    vm.selectProject(Project(
+      id = "track_mute_solo_project",
+      title = "Track Mute Solo",
+      tracks = tracks
+    ))
+
+    vm.toggleTrackMute(audioTrack.id)
+    assertEquals(true, vm.currentProject.value!!.tracks.first { it.id == audioTrack.id }.isMuted)
+    vm.toggleTrackSolo(audioTrack.id)
+    assertEquals(true, vm.currentProject.value!!.tracks.first { it.id == audioTrack.id }.isSolo)
+
+    vm.undo()
+    assertEquals(false, vm.currentProject.value!!.tracks.first { it.id == audioTrack.id }.isSolo)
+    assertEquals(true, vm.currentProject.value!!.tracks.first { it.id == audioTrack.id }.isMuted)
+  }
+
+  @Test
+  fun `moving clip between compatible tracks preserves time and rejects incompatible tracks`() {
+    val application = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.StudioViewModel(application)
+    val tracks = Project.defaultTracks()
+    val music = tracks.first { it.type == com.example.data.TrackType.AUDIO_MUSIC }
+    val voice = tracks.first { it.type == com.example.data.TrackType.AUDIO_VOICE }
+    val video = tracks.first { it.type == com.example.data.TrackType.VIDEO }
+    val clip = com.example.data.MediaClip(
+      id = "move_audio_clip",
+      name = "Voiceover",
+      mediaType = com.example.data.MediaType.AUDIO,
+      trackId = music.id,
+      trackType = music.type,
+      startTimeMs = 4200L,
+      durationMs = 1800L
+    )
+    vm.selectProject(Project(
+      id = "move_audio_project",
+      title = "Move Audio",
+      tracks = tracks,
+      clips = listOf(clip),
+      durationMs = 6000L
+    ))
+
+    vm.moveClipToTrack(clip.id, voice.id)
+    val moved = vm.currentProject.value!!.clips.single()
+    assertEquals(voice.id, moved.trackId)
+    assertEquals(voice.type, moved.trackType)
+    assertEquals(4200L, moved.startTimeMs)
+
+    vm.moveClipToTrack(clip.id, video.id)
+    val afterRejectedMove = vm.currentProject.value!!.clips.single()
+    assertEquals(voice.id, afterRejectedMove.trackId)
+    assertEquals(4200L, afterRejectedMove.startTimeMs)
+  }
+
+  @Test
   fun `project persistence retains mixer tracks and audio processing settings`() {
     val context = ApplicationProvider.getApplicationContext<Context>()
     val repository = ProjectRepository(context)
@@ -676,16 +735,23 @@ class ExampleRobolectricTest {
     // saveProject persists through the repository's IO queue; wait for the Room/JSON
     // write to finish before constructing a fresh repository instance.
     val persistenceFile = java.io.File(context.filesDir, "vex_projects.json")
-    repeat(100) {
-      if (persistenceFile.exists() && persistenceFile.readText().contains(project.id)) return@repeat
+    var persistenceAttempts = 0
+    while (
+      persistenceAttempts < 100 &&
+      (!persistenceFile.exists() || !persistenceFile.readText().contains(project.id))
+    ) {
       Thread.sleep(50)
+      persistenceAttempts++
     }
     val restoredRepository = ProjectRepository(context)
     var restored: Project? = null
-    repeat(100) {
+    var loadAttempts = 0
+    while (restored == null && loadAttempts < 100) {
       restored = restoredRepository.projects.value.firstOrNull { it.id == project.id }
-      if (restored != null) return@repeat
-      Thread.sleep(50)
+      if (restored == null) {
+        Thread.sleep(50)
+        loadAttempts++
+      }
     }
     val loadedProject = requireNotNull(restored) { "Persisted project did not load within 5 seconds" }
     val restoredTrack = loadedProject.tracks.first { it.id == "track_audio_1" }
