@@ -334,6 +334,19 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     // --- Clip Editing Actions ---
 
+    /** Reorders whole timeline lanes while keeping every clip attached to its track. */
+    fun reorderTracks(fromIndex: Int, toIndex: Int) {
+        val project = _currentProject.value ?: return
+        if (fromIndex !in project.tracks.indices || toIndex !in project.tracks.indices || fromIndex == toIndex) return
+        pushUndoState(project)
+        val reorderedTracks = project.tracks.toMutableList()
+        val movedTrack = reorderedTracks.removeAt(fromIndex)
+        reorderedTracks.add(toIndex, movedTrack)
+        val updatedProject = project.copy(tracks = reorderedTracks)
+        _currentProject.value = updatedProject
+        projectRepo.saveProject(updatedProject)
+    }
+
     fun reorderTrackClips(trackId: String, fromIndex: Int, toIndex: Int) {
         val project = _currentProject.value ?: return
         val ordered = project.clips.filter { it.trackId == trackId }.sortedBy { it.startTimeMs }
