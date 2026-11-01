@@ -329,6 +329,23 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         syncPlayerToPlayhead(playhead)
     }
 
+    /** Keeps the project duration, playhead, selection and preview aligned after timeline edits. */
+    private fun normalizeTimelineState() {
+        val project = _currentProject.value ?: return
+        val duration = project.clips.maxOfOrNull { clip ->
+            clip.startTimeMs.coerceAtLeast(0L) + clip.durationMs.coerceAtLeast(0L)
+        } ?: 0L
+        val normalized = if (project.durationMs == duration) project else project.copy(durationMs = duration)
+        _currentProject.value = normalized
+        val playhead = if (duration > 0L) _playheadPositionMs.value.coerceIn(0L, duration) else 0L
+        _playheadPositionMs.value = playhead
+        if (normalized.clips.none { it.id == _selectedClipId.value }) {
+            _selectedClipId.value = normalized.clips.firstOrNull()?.id
+        }
+        projectRepo.saveProject(normalized)
+        syncPlayerToPlayhead(playhead)
+    }
+
     fun undo() {
         val current = _currentProject.value ?: return
         if (undoStack.isNotEmpty()) {
@@ -382,7 +399,8 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         _currentProject.value = updatedProject
         _selectedClipId.value = moved.id
         projectRepo.saveProject(updatedProject)
-    }
+            normalizeTimelineState()
+}
 
     /**
      * Moves a media clip to another compatible track without changing its timeline position.
@@ -412,7 +430,8 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         _selectedClipId.value = clipId
         projectRepo.saveProject(updatedProject)
         syncPlayerToPlayhead(_playheadPositionMs.value)
-    }
+            normalizeTimelineState()
+}
 
     fun moveClipToIndex(clipId: String, targetIndex: Int) {
         val project = _currentProject.value ?: return
@@ -491,7 +510,8 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         _currentProject.value = updatedProject
         _selectedClipId.value = secondPart.id
         projectRepo.saveProject(updatedProject)
-    }
+            normalizeTimelineState()
+}
 
     fun trimClipStart(clipId: String, deltaMs: Long) {
         val project = _currentProject.value ?: return
@@ -527,7 +547,8 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         _currentProject.value = updatedProject
         projectRepo.saveProject(updatedProject)
         syncPlayerToPlayhead(_playheadPositionMs.value)
-    }
+            normalizeTimelineState()
+}
 
     fun trimClipEnd(clipId: String, deltaMs: Long) {
         val project = _currentProject.value ?: return
@@ -562,7 +583,8 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         _currentProject.value = updatedProject
         projectRepo.saveProject(updatedProject)
         syncPlayerToPlayhead(_playheadPositionMs.value)
-    }
+            normalizeTimelineState()
+}
 
     fun setClipDuration(clipId: String, durationMs: Long) {
         val project = _currentProject.value ?: return
@@ -586,7 +608,8 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         _selectedClipId.value = clipId
         projectRepo.saveProject(updatedProject)
         syncPlayerToPlayhead(_playheadPositionMs.value)
-    }
+            normalizeTimelineState()
+}
 
     /**
      * Returns the snapped clip start and the timeline boundary used as its guide.
@@ -695,7 +718,8 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         _playheadPositionMs.value = _playheadPositionMs.value.coerceAtMost(maxEnd)
         projectRepo.saveProject(updatedProject)
         syncPlayerToPlayhead(_playheadPositionMs.value)
-    }
+            normalizeTimelineState()
+}
 
 
     /**
@@ -721,7 +745,8 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         _playheadPositionMs.value = _playheadPositionMs.value.coerceAtMost(maxEnd)
         projectRepo.saveProject(updatedProject)
         syncPlayerToPlayhead(_playheadPositionMs.value)
-    }
+            normalizeTimelineState()
+}
 
     /**
      * Moves selected clips together without changing their relative or absolute
@@ -755,7 +780,8 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         projectRepo.saveProject(updatedProject)
         syncPlayerToPlayhead(_playheadPositionMs.value)
         return true
-    }
+            normalizeTimelineState()
+}
 
 
     fun stepPlayhead(deltaMs: Long) {
@@ -804,7 +830,8 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         _currentProject.value = updatedProject
         projectRepo.saveProject(updatedProject)
         syncPlayerToPlayhead(_playheadPositionMs.value)
-    }
+            normalizeTimelineState()
+}
 
     fun setClipVolume(clipId: String, volume: Float) {
         val project = _currentProject.value ?: return
