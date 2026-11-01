@@ -368,6 +368,50 @@ class ExampleRobolectricTest {
   }
 
   @Test
+  fun `clip speed is clamped updates project duration and can be undone`() {
+    val application = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.StudioViewModel(application)
+    val clip = com.example.data.MediaClip(
+      id = "speed_guard_clip",
+      name = "Speed Guard",
+      trackId = "track_video_1",
+      trackType = com.example.data.TrackType.VIDEO,
+      startTimeMs = 1000L,
+      durationMs = 10000L,
+      sourceDurationMs = 10000L,
+      speed = 1f
+    )
+    val project = com.example.data.Project(
+      id = "speed_guard_project",
+      title = "Speed Guard",
+      clips = listOf(clip),
+      durationMs = 11000L
+    )
+    vm.projectRepo.saveProject(project)
+    vm.selectProject(project)
+
+    // A zero speed must never divide by zero; the supported minimum is 0.25x.
+    vm.setClipSpeed(clip.id, 0f)
+    val slowed = vm.currentProject.value!!.clips.first { it.id == clip.id }
+    assertEquals(0.25f, slowed.speed)
+    assertEquals(40000L, slowed.durationMs)
+    assertEquals(41000L, vm.currentProject.value?.durationMs)
+
+    // Values above the UI's maximum are clamped and the timeline end is recalculated.
+    vm.setClipSpeed(clip.id, 99f)
+    val accelerated = vm.currentProject.value!!.clips.first { it.id == clip.id }
+    assertEquals(4f, accelerated.speed)
+    assertEquals(2500L, accelerated.durationMs)
+    assertEquals(3500L, vm.currentProject.value?.durationMs)
+
+    vm.undo()
+    val restored = vm.currentProject.value!!.clips.first { it.id == clip.id }
+    assertEquals(0.25f, restored.speed)
+    assertEquals(40000L, restored.durationMs)
+    assertEquals(41000L, vm.currentProject.value?.durationMs)
+  }
+
+  @Test
   fun `project aspect ratio change is undoable`() {
     val application = ApplicationProvider.getApplicationContext<android.app.Application>()
     val vm = com.example.ui.StudioViewModel(application)
