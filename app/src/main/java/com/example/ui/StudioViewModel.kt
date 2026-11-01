@@ -186,9 +186,11 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     fun syncPlayerToPlayhead(posMs: Long) {
         val project = _currentProject.value ?: return
-        val activeVideoClip = project.clips.filter {
-            it.trackType == TrackType.VIDEO && it.mediaType == MediaType.VIDEO
-        }.find { posMs >= it.startTimeMs && posMs < (it.startTimeMs + it.durationMs) }
+        val trackOrder = project.tracks.mapIndexed { index, track -> track.id to index }.toMap()
+        val activeVideoClip = project.clips
+            .filter { it.trackType == TrackType.VIDEO && it.mediaType == MediaType.VIDEO }
+            .filter { posMs >= it.startTimeMs && posMs < (it.startTimeMs + it.durationMs) }
+            .maxByOrNull { trackOrder[it.trackId] ?: Int.MIN_VALUE }
 
         if (activeVideoClip != null && activeVideoClip.filePath.isNotEmpty()) {
             val offsetMs = ((posMs - activeVideoClip.startTimeMs) * activeVideoClip.speed).toLong().plus(activeVideoClip.sourceStartMs).coerceAtLeast(0L)
