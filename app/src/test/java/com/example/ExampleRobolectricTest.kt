@@ -421,6 +421,27 @@ class ExampleRobolectricTest {
   }
 
   @Test
+  fun `timeline audio track mute and solo controls update project state`() {
+    val application = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.StudioViewModel(application)
+    val project = com.example.data.Project(
+      id = "track_controls_project",
+      title = "Track Controls"
+    )
+    vm.selectProject(project)
+
+    vm.toggleTrackMute("track_audio_1")
+    assertEquals(true, vm.currentProject.value!!.tracks.first { it.id == "track_audio_1" }.isMuted)
+
+    vm.toggleTrackSolo("track_audio_1")
+    assertEquals(true, vm.currentProject.value!!.tracks.first { it.id == "track_audio_1" }.isSolo)
+
+    vm.undo()
+    assertEquals(false, vm.currentProject.value!!.tracks.first { it.id == "track_audio_1" }.isSolo)
+    assertEquals(true, vm.currentProject.value!!.tracks.first { it.id == "track_audio_1" }.isMuted)
+  }
+
+  @Test
   fun `timeline snapping aligns clip start and end to nearby clip edges`() {
     val application = ApplicationProvider.getApplicationContext<android.app.Application>()
     val vm = com.example.ui.StudioViewModel(application)
