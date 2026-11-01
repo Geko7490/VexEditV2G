@@ -660,6 +660,24 @@ fun StudioScreen(
                             Text(Strings.get("move_to_track", lang), fontSize = 11.sp)
                         }
                         DropdownMenu(expanded = bulkMoveMenuExpanded, onDismissRequest = { bulkMoveMenuExpanded = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Shift left 1 s", fontSize = 12.sp) },
+                                onClick = {
+                                    viewModel.moveClipsByDelta(multiSelectedClipIds, -1000L)
+                                    bulkMoveMenuExpanded = false
+                                },
+                                enabled = multiSelectedClipIds.isNotEmpty()
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Shift right 1 s", fontSize = 12.sp) },
+                                onClick = {
+                                    viewModel.moveClipsByDelta(multiSelectedClipIds, 1000L)
+                                    bulkMoveMenuExpanded = false
+                                },
+                                enabled = multiSelectedClipIds.isNotEmpty()
+                            )
+                            HorizontalDivider(color = VexBorder)
+
                             val selectedClips = project?.clips?.filter { it.id in multiSelectedClipIds } ?: emptyList()
                             (project?.tracks ?: emptyList()).forEach { target ->
                                 val acceptsSelection = selectedClips.isNotEmpty() && selectedClips.all { clip ->
