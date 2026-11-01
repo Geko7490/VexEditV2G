@@ -1071,6 +1071,7 @@ fun StudioScreen(
                                                                 val session = activeTrimSession
                                                                 activeTrimSession = null
                                                                 activeTrimmingInfo = null
+                                                                snapGuideTimeMs = null
                                                                 if (session != null && session.currentDeltaMs != 0L) {
                                                                     viewModel.trimClipStart(clip.id, session.currentDeltaMs)
                                                                 }
@@ -1078,6 +1079,7 @@ fun StudioScreen(
                                                             onDragCancel = {
                                                                 activeTrimSession = null
                                                                 activeTrimmingInfo = null
+                                                                snapGuideTimeMs = null
                                                             },
                                                             onHorizontalDrag = { change, dragAmount ->
                                                                 change.consume()
@@ -1088,8 +1090,18 @@ fun StudioScreen(
                                                                 val maxDelta = session.initialDurationMs - 300L
                                                                 val minDelta = -(session.initialSourceStartMs / effectiveSpeed).toLong()
                                                                 val clampedDeltaMs = deltaMs.coerceIn(minDelta, maxDelta)
+                                                                val proposedStartMs = (session.initialStartTimeMs + clampedDeltaMs).coerceAtLeast(0L)
+                                                                val snapBoundaryMs = viewModel.findTimelineBoundarySnap(
+                                                                    clip.id,
+                                                                    proposedStartMs,
+                                                                    (120f / pxPerMs).toLong().coerceIn(40L, 1000L)
+                                                                )
+                                                                val snappedDeltaMs = if (snapBoundaryMs != null) {
+                                                                    (snapBoundaryMs - session.initialStartTimeMs).coerceIn(minDelta, maxDelta)
+                                                                } else clampedDeltaMs
+                                                                snapGuideTimeMs = if (snapBoundaryMs != null && snappedDeltaMs == snapBoundaryMs - session.initialStartTimeMs) snapBoundaryMs else null
 
-                                                                activeTrimSession = session.copy(currentDeltaMs = clampedDeltaMs)
+                                                                activeTrimSession = session.copy(currentDeltaMs = snappedDeltaMs)
 
                                                                 val liveSourceStart = (session.initialSourceStartMs + (clampedDeltaMs * effectiveSpeed).toLong()).coerceIn(0L, session.sourceDurationMs)
                                                                 val liveTimelineStart = (session.initialStartTimeMs + clampedDeltaMs).coerceAtLeast(0L)
@@ -1156,6 +1168,7 @@ fun StudioScreen(
                                                                 val session = activeTrimSession
                                                                 activeTrimSession = null
                                                                 activeTrimmingInfo = null
+                                                                snapGuideTimeMs = null
                                                                 if (session != null && session.currentDeltaMs != 0L) {
                                                                     viewModel.trimClipEnd(clip.id, session.currentDeltaMs)
                                                                 }
@@ -1163,6 +1176,7 @@ fun StudioScreen(
                                                             onDragCancel = {
                                                                 activeTrimSession = null
                                                                 activeTrimmingInfo = null
+                                                                snapGuideTimeMs = null
                                                             },
                                                             onHorizontalDrag = { change, dragAmount ->
                                                                 change.consume()
@@ -1178,7 +1192,17 @@ fun StudioScreen(
                                                                     120_000L
                                                                 }
                                                                 val targetDuration = (session.initialDurationMs + deltaMs).coerceIn(300L, maxAllowedDuration)
-                                                                val clampedDeltaMs = targetDuration - session.initialDurationMs
+                                                                val proposedEndMs = session.initialStartTimeMs + targetDuration
+                                                                val snapBoundaryMs = viewModel.findTimelineBoundarySnap(
+                                                                    clip.id,
+                                                                    proposedEndMs,
+                                                                    (120f / pxPerMs).toLong().coerceIn(40L, 1000L)
+                                                                )
+                                                                val snappedDuration = if (snapBoundaryMs != null) {
+                                                                    (snapBoundaryMs - session.initialStartTimeMs).coerceIn(300L, maxAllowedDuration)
+                                                                } else targetDuration
+                                                                val clampedDeltaMs = snappedDuration - session.initialDurationMs
+                                                                snapGuideTimeMs = if (snapBoundaryMs != null && snappedDuration == snapBoundaryMs - session.initialStartTimeMs) snapBoundaryMs else null
 
                                                                 activeTrimSession = session.copy(currentDeltaMs = clampedDeltaMs)
 
