@@ -647,6 +647,22 @@ fun StudioScreen(
                         Spacer(Modifier.width(3.dp))
                         Text(Strings.get("delete", lang), fontSize = 11.sp)
                     }
+                    FilledTonalButton(
+                        onClick = {
+                            if (viewModel.mergeClips(multiSelectedClipIds)) {
+                                multiSelectedClipIds = emptySet()
+                                isMultiSelectMode = false
+                            }
+                        },
+                        enabled = multiSelectedClipIds.size >= 2,
+                        colors = ButtonDefaults.filledTonalButtonColors(containerColor = VexPanelElevated, contentColor = VexAccentLight),
+                        contentPadding = PaddingValues(horizontal = 9.dp, vertical = 4.dp),
+                        modifier = Modifier.height(34.dp).testTag("timeline_merge_clips_btn")
+                    ) {
+                        Icon(Icons.Default.Merge, contentDescription = null, modifier = Modifier.size(15.dp))
+                        Spacer(Modifier.width(3.dp))
+                        Text("Merge", fontSize = 11.sp)
+                    }
                     Box {
                         FilledTonalButton(
                             onClick = { bulkMoveMenuExpanded = true },
@@ -1039,6 +1055,14 @@ fun StudioScreen(
                                 }
                             }
                         }
+                    }
+                    TextButton(
+                        onClick = { viewModel.addVideoTrack() },
+                        modifier = Modifier.fillMaxWidth().height(30.dp).testTag("timeline_add_video_track_btn"),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(13.dp))
+                        Text("Video layer", fontSize = 10.sp, maxLines = 1)
                     }
                 }
 
