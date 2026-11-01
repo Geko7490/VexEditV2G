@@ -1006,7 +1006,7 @@ fun StudioScreen(
                                                             (120f / pxPerMs).toLong().coerceIn(40L, 1000L)
                                                         )?.first ?: rawStartMs
                                                         val rowHeightPx = with(density) { 50.dp.toPx() }
-                                                        val rowDelta = (dragDeltaYPx / rowHeightPx).let { kotlin.math.roundToInt(it) }
+                                                        val rowDelta = kotlin.math.round(dragDeltaYPx / rowHeightPx).toInt()
                                                         val targetTrackIndex = (sourceTrackIndex + rowDelta).coerceIn(tracks.indices)
                                                         val targetTrack = tracks.getOrNull(targetTrackIndex)
                                                         if (targetTrack != null && targetTrack.id != track.id) {
