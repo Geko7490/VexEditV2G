@@ -917,13 +917,28 @@ fun StudioScreen(
                         tracks.forEach { track ->
                             val sourceTrackIndex = tracks.indexOfFirst { it.id == track.id }
                             val trackClips = project?.clips?.filter { it.trackId == track.id }?.sortedBy { it.startTimeMs } ?: emptyList()
+                            val draggedClip = project?.clips?.firstOrNull { it.id == draggingClipId }
+                            val draggedSourceIndex = draggedClip?.let { tracks.indexOfFirst { item -> item.id == it.trackId } } ?: -1
+                            val rowHeightPx = with(density) { 50.dp.toPx() }
+                            val dragTargetIndex = if (draggingClipId != null && draggedSourceIndex >= 0) {
+                                (draggedSourceIndex + kotlin.math.round(dragDeltaYPx / rowHeightPx).toInt()).coerceIn(tracks.indices)
+                            } else -1
+                            val isDropTarget = dragTargetIndex == sourceTrackIndex && draggedSourceIndex != sourceTrackIndex
+                            val acceptsDraggedClip = draggedClip?.let { moving ->
+                                when (moving.mediaType) {
+                                    MediaType.AUDIO -> track.type == TrackType.AUDIO_MUSIC ||
+                                        track.type == TrackType.AUDIO_VOICE ||
+                                        track.type == TrackType.AUDIO_SFX
+                                    MediaType.VIDEO, MediaType.PHOTO -> track.type == TrackType.VIDEO
+                                }
+                            } == true
 
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(50.dp)
-                                    .border(width = 0.5.dp, color = VexBorder)
-                                    .background(VexPanel.copy(alpha = 0.4f))
+                                    .border(width = if (isDropTarget && acceptsDraggedClip) 1.dp else 0.5.dp, color = if (isDropTarget && acceptsDraggedClip) VexAccent else VexBorder)
+                                    .background(if (isDropTarget && acceptsDraggedClip) VexAccent.copy(alpha = 0.12f) else VexPanel.copy(alpha = 0.4f))
                             ) {
                                 trackClips.forEachIndexed { clipIndex, clip ->
                                     val isSelected = clip.id == selectedClipId
