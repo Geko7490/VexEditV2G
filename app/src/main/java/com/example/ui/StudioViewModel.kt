@@ -486,9 +486,16 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             mediaManager.queryFileDurationMs(clip.filePath, clip.uriString).takeIf { it > 0L }
                 ?: (clip.sourceStartMs + (clip.durationMs * clip.speed).toLong())
         }
-        val speed = clip.speed.takeIf { it > 0f } ?: 1f
-        val minDelta = maxOf(-(clip.sourceStartMs / speed).toLong(), -clip.startTimeMs)
-        val maxDelta = clip.durationMs - 300L
+        val speed = clip.speed.takeIf { it.isFinite() && it > 0f } ?: 1f
+        val safeSourceStart = clip.sourceStartMs.coerceAtLeast(0L)
+        val minDelta = maxOf(
+            -(safeSourceStart / speed).toLong(),
+            -clip.startTimeMs.coerceAtLeast(0L)
+        )
+        // Malformed/very short imported clips can be below the normal 300ms minimum.
+        // Keep the clamp range valid instead of passing (0, negative) to coerceIn().
+        val maxDelta = (clip.durationMs - 300L).coerceAtLeast(0L)
+        if (minDelta > maxDelta) return
         val delta = deltaMs.coerceIn(minDelta, maxDelta)
         if (delta == 0L) return
 
@@ -496,7 +503,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         val sourceDelta = (delta * speed).toLong()
         val updatedClip = clip.copy(
             startTimeMs = (clip.startTimeMs + delta).coerceAtLeast(0L),
-            sourceStartMs = (clip.sourceStartMs + sourceDelta).coerceAtLeast(0L),
+            sourceStartMs = (safeSourceStart + sourceDelta).coerceAtLeast(0L),
             durationMs = (clip.durationMs - delta).coerceAtLeast(300L),
             sourceDurationMs = sourceDuration
         )
