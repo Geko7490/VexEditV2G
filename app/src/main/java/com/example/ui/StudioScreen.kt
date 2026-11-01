@@ -659,7 +659,7 @@ fun StudioScreen(
                         contentPadding = PaddingValues(horizontal = 9.dp, vertical = 4.dp),
                         modifier = Modifier.height(34.dp).testTag("timeline_merge_clips_btn")
                     ) {
-                        Icon(Icons.Default.Merge, contentDescription = null, modifier = Modifier.size(15.dp))
+                        Icon(Icons.Default.Link, contentDescription = null, modifier = Modifier.size(15.dp))
                         Spacer(Modifier.width(3.dp))
                         Text("Merge", fontSize = 11.sp)
                     }
