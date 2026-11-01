@@ -1404,13 +1404,32 @@ fun StudioScreen(
                     ) {
                         Canvas(
                             modifier = Modifier
-                                .size(14.dp)
-                                .offset(x = (-6).dp, y = (-2).dp)
+                                .size(24.dp)
+                                .offset(x = (-11).dp, y = (-2).dp)
+                                .pointerInput(pxPerMs, totalDurationMs) {
+                                    var initialPlayheadMs = 0L
+                                    var accumulatedDragPx = 0f
+                                    detectDragGestures(
+                                        onDragStart = {
+                                            initialPlayheadMs = viewModel.playheadPositionMs.value
+                                            accumulatedDragPx = 0f
+                                        },
+                                        onDrag = { change, dragAmount ->
+                                            change.consume()
+                                            accumulatedDragPx += dragAmount.x
+                                            val nextPosition = initialPlayheadMs +
+                                                (accumulatedDragPx / pxPerMs).toLong()
+                                            viewModel.setPlayheadPosition(
+                                                nextPosition.coerceIn(0L, totalDurationMs)
+                                            )
+                                        }
+                                    )
+                                }
                         ) {
                             val path = Path().apply {
-                                moveTo(size.width / 2f, size.height)
-                                lineTo(0f, 0f)
-                                lineTo(size.width, 0f)
+                                moveTo(size.width / 2f, size.height * 0.78f)
+                                lineTo(size.width * 0.18f, 0f)
+                                lineTo(size.width * 0.82f, 0f)
                                 close()
                             }
                             drawPath(path, color = VexAccent)
