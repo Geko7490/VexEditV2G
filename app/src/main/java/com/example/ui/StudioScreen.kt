@@ -1088,7 +1088,10 @@ fun StudioScreen(
                                                                 val deltaMs = (accumulatedPx / pxPerMs).toLong()
                                                                 val effectiveSpeed = if (clip.speed > 0f) clip.speed else 1.0f
                                                                 val maxDelta = session.initialDurationMs - 300L
-                                                                val minDelta = -(session.initialSourceStartMs / effectiveSpeed).toLong()
+                                                                val minDelta = maxOf(
+                                                                    -(session.initialSourceStartMs / effectiveSpeed).toLong(),
+                                                                    -session.initialStartTimeMs
+                                                                )
                                                                 val clampedDeltaMs = deltaMs.coerceIn(minDelta, maxDelta)
                                                                 val proposedStartMs = (session.initialStartTimeMs + clampedDeltaMs).coerceAtLeast(0L)
                                                                 val snapBoundaryMs = viewModel.findTimelineBoundarySnap(
