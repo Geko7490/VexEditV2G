@@ -382,6 +382,45 @@ class ExampleRobolectricTest {
   }
 
   @Test
+  fun `split targets clip under playhead when selected clip is elsewhere`() {
+    val application = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.StudioViewModel(application)
+    val selectedElsewhere = com.example.data.MediaClip(
+      id = "selected_elsewhere",
+      name = "Selected",
+      trackId = "track_video_1",
+      trackType = com.example.data.TrackType.VIDEO,
+      startTimeMs = 0L,
+      durationMs = 2000L
+    )
+    val clipUnderPlayhead = com.example.data.MediaClip(
+      id = "clip_under_playhead",
+      name = "Target",
+      trackId = "track_video_1",
+      trackType = com.example.data.TrackType.VIDEO,
+      startTimeMs = 3000L,
+      durationMs = 4000L
+    )
+    val project = com.example.data.Project(
+      id = "split_under_playhead",
+      title = "Split Under Playhead",
+      clips = listOf(selectedElsewhere, clipUnderPlayhead),
+      durationMs = 7000L
+    )
+    vm.selectProject(project)
+    vm.selectClip(selectedElsewhere.id)
+    vm.setPlayheadPosition(5000L)
+
+    vm.splitClipAtPlayhead()
+
+    val clips = vm.currentProject.value!!.clips
+    assertEquals(3, clips.size)
+    assertEquals(2000L, clips.first { it.id == clipUnderPlayhead.id }.durationMs)
+    assertTrue(clips.any { it.name == "Target (Part 2)" && it.startTimeMs == 5000L })
+    assertEquals("Target (Part 2)", clips.first { it.id == vm.selectedClipId.value }.name)
+  }
+
+  @Test
   fun `timeline snapping aligns clip start and end to nearby clip edges`() {
     val application = ApplicationProvider.getApplicationContext<android.app.Application>()
     val vm = com.example.ui.StudioViewModel(application)
