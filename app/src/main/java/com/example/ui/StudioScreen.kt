@@ -856,7 +856,7 @@ fun StudioScreen(
                         .border(width = 0.5.dp, color = VexBorder)
                 ) {
                     val tracks = project?.tracks ?: Project.defaultTracks()
-                    tracks.forEach { track ->
+                    tracks.forEachIndexed { trackIndex, track ->
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -880,11 +880,16 @@ fun StudioScreen(
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
-                                if (track.type == TrackType.AUDIO_MUSIC ||
-                                    track.type == TrackType.AUDIO_VOICE ||
-                                    track.type == TrackType.AUDIO_SFX
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                                    if (track.type == TrackType.AUDIO_MUSIC ||
+                                        track.type == TrackType.AUDIO_VOICE ||
+                                        track.type == TrackType.AUDIO_SFX
+                                    ) {
+                                        Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                                         Box(
                                             modifier = Modifier
                                                 .width(22.dp)
@@ -917,6 +922,27 @@ fun StudioScreen(
                                                 fontWeight = FontWeight.Bold
                                             )
                                         }
+                                        }
+                                    } else {
+                                        Spacer(modifier = Modifier.width(1.dp))
+                                    }
+                                    Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text(
+                                            text = "↑",
+                                            color = if (trackIndex > 0) VexTextSecondary else VexTextSecondary.copy(alpha = 0.25f),
+                                            fontSize = 13.sp,
+                                            modifier = Modifier.clickable(enabled = trackIndex > 0) {
+                                                viewModel.reorderTracks(trackIndex, trackIndex - 1)
+                                            }
+                                        )
+                                        Text(
+                                            text = "↓",
+                                            color = if (trackIndex < tracks.lastIndex) VexTextSecondary else VexTextSecondary.copy(alpha = 0.25f),
+                                            fontSize = 13.sp,
+                                            modifier = Modifier.clickable(enabled = trackIndex < tracks.lastIndex) {
+                                                viewModel.reorderTracks(trackIndex, trackIndex + 1)
+                                            }
+                                        )
                                     }
                                 }
                             }
