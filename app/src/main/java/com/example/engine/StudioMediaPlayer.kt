@@ -270,6 +270,7 @@ class StudioMediaPlayer(context: Context) {
         (layeredVideoPlayers.keys - activeIds).forEach { id ->
             try { layeredVideoPlayers.remove(id)?.release() } catch (_: Exception) {}
             layeredVideoPaths.remove(id)
+            layeredVideoSurfaces.remove(id)
         }
 
         validLayers.forEach { layer ->
