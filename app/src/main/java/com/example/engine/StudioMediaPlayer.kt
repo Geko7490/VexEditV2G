@@ -41,6 +41,7 @@ data class VideoLayerPlayback(
     val filePath: String,
     val startOffsetMs: Long,
     val shouldPlay: Boolean,
+    val speed: Float = 1f,
     val volume: Float = 1f,
     val muted: Boolean = false
 )
@@ -277,6 +278,7 @@ class StudioMediaPlayer(context: Context) {
             if (sameSource) {
                 val player = existing!!
                 player.volume = if (layer.muted) 0f else layer.volume.coerceIn(0f, 1f)
+                player.setPlaybackSpeed(layer.speed.coerceIn(0.25f, 4f))
                 val target = layer.startOffsetMs.coerceAtLeast(0L)
                 val drift = kotlin.math.abs(player.currentPosition - target)
                 if (drift > if (layer.shouldPlay) 650L else 120L) player.seekTo(target)
@@ -287,6 +289,7 @@ class StudioMediaPlayer(context: Context) {
                 layeredVideoPlayers[layer.clipId] = player
                 layeredVideoPaths[layer.clipId] = layer.filePath
                 player.volume = if (layer.muted) 0f else layer.volume.coerceIn(0f, 1f)
+                player.setPlaybackSpeed(layer.speed.coerceIn(0.25f, 4f))
                 layeredVideoSurfaces[layer.clipId]?.takeIf { it.isValid }?.let(player::setVideoSurface)
                 player.setMediaItem(MediaItem.fromUri(Uri.fromFile(File(layer.filePath))))
                 player.seekTo(layer.startOffsetMs.coerceAtLeast(0L))
