@@ -187,25 +187,24 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     fun syncPlayerToPlayhead(posMs: Long) {
         val project = _currentProject.value ?: return
         val trackOrder = project.tracks.mapIndexed { index, track -> track.id to index }.toMap()
-        val activeVideoClip = project.clips
+        val activeVideoLayers = project.clips
             .filter { it.trackType == TrackType.VIDEO && it.mediaType == MediaType.VIDEO }
             .filter { posMs >= it.startTimeMs && posMs < (it.startTimeMs + it.durationMs) }
-            .maxByOrNull { trackOrder[it.trackId] ?: Int.MIN_VALUE }
-
-        if (activeVideoClip != null && activeVideoClip.filePath.isNotEmpty()) {
-            val offsetMs = ((posMs - activeVideoClip.startTimeMs) * activeVideoClip.speed).toLong().plus(activeVideoClip.sourceStartMs).coerceAtLeast(0L)
-            val isMuted = activeVideoClip.audioProperties.isMuted
-            val vol = activeVideoClip.volume.coerceIn(0f, 1f)
-            player.bindVideoClip(
-                filePath = activeVideoClip.filePath,
-                startOffsetMs = offsetMs,
-                shouldPlay = _isPlaying.value,
-                volume = vol,
-                muted = isMuted
-            )
-        } else {
-            player.stopVideo()
-        }
+            .sortedBy { trackOrder[it.trackId] ?: Int.MIN_VALUE }
+            .map { clip ->
+                val offsetMs = ((posMs - clip.startTimeMs) * clip.speed).toLong()
+                    .plus(clip.sourceStartMs).coerceAtLeast(0L)
+                val track = project.tracks.find { it.id == clip.trackId }
+                VideoLayerPlayback(
+                    clipId = clip.id,
+                    filePath = clip.filePath,
+                    startOffsetMs = offsetMs,
+                    shouldPlay = _isPlaying.value,
+                    volume = clip.volume.coerceIn(0f, 1f),
+                    muted = clip.audioProperties.isMuted || track?.isMuted == true
+                )
+            }
+        player.bindVideoLayers(activeVideoLayers)
 
         // Synchronize every active audio clip, including music, voice and SFX.
         val activeAudioClips = project.clips.filter { clip ->
