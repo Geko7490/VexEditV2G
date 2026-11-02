@@ -10,6 +10,7 @@ import com.example.engine.ExportEngine
 import com.example.engine.ExportResult
 import com.example.engine.StudioMediaPlayer
 import com.example.engine.AudioTrackPlayback
+import com.example.engine.VideoLayerPlayback
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -200,6 +201,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                     filePath = clip.filePath,
                     startOffsetMs = offsetMs,
                     shouldPlay = _isPlaying.value,
+                    speed = clip.speed,
                     volume = clip.volume.coerceIn(0f, 1f),
                     muted = clip.audioProperties.isMuted || track?.isMuted == true
                 )
