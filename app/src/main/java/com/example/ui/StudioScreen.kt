@@ -26,6 +26,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
@@ -131,6 +132,19 @@ fun StudioScreen(
             ?: (if (visualClips.isNotEmpty() && playheadMs <= 0L) {
                 visualClips.maxByOrNull { trackOrder[it.trackId] ?: Int.MIN_VALUE }
             } else null)
+    }
+
+    // All simultaneously active video clips, ordered from bottom lane to top lane.
+    val activeVideoClips = remember(project, playheadMs, trackOrder) {
+        project?.clips
+            ?.filter {
+                it.trackType == TrackType.VIDEO &&
+                    it.mediaType == MediaType.VIDEO &&
+                    playheadMs >= it.startTimeMs &&
+                    playheadMs < (it.startTimeMs + it.durationMs)
+            }
+            ?.sortedBy { trackOrder[it.trackId] ?: Int.MIN_VALUE }
+            .orEmpty()
     }
 
     // Synchronize media player to current playhead and clip
@@ -357,89 +371,56 @@ fun StudioScreen(
                             }
                         } else if (activeVisualClip.mediaType == MediaType.VIDEO) {
                             Box(modifier = Modifier.fillMaxSize()) {
-                                val thumbPath = activeVisualClip.thumbnailPath.ifEmpty { activeVisualClip.filePath }
-                                if (thumbPath.isNotEmpty()) {
-                                    AsyncImage(
-                                        model = thumbPath,
-                                        contentDescription = activeVisualClip.name,
-                                        modifier = Modifier.fillMaxSize(),
-                                        contentScale = ContentScale.Crop,
-                                        alpha = opacity,
-                                        colorFilter = activeEffectColorFilter
-                                    )
-                                }
-
-                                if (playerState.status != PlaybackStatus.ERROR) {
-                                    AndroidView(
-                                        factory = { ctx ->
-                                            TextureView(ctx).apply {
-                                                isOpaque = true
-                                                surfaceTextureListener = object : TextureView.SurfaceTextureListener {
-                                                    override fun onSurfaceTextureAvailable(st: SurfaceTexture, w: Int, h: Int) {
-                                                        val surface = Surface(st)
-                                                        viewModel.player.attachSurface(surface)
-                                                        viewModel.syncPlayerToPlayhead(viewModel.playheadPositionMs.value)
-                                                    }
-                                                    override fun onSurfaceTextureSizeChanged(st: SurfaceTexture, w: Int, h: Int) {}
-                                                    override fun onSurfaceTextureDestroyed(st: SurfaceTexture): Boolean {
-                                                        viewModel.player.attachSurface(null)
-                                                        return true
-                                                    }
-                                                    override fun onSurfaceTextureUpdated(st: SurfaceTexture) {}
-                                                }
-                                            }
-                                        },
-                                        modifier = Modifier.fillMaxSize()
-                                    )
-                                }
-
-                                if (playerState.status == PlaybackStatus.LOADING) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(32.dp).align(Alignment.Center),
-                                        color = VexAccent,
-                                        strokeWidth = 3.dp
-                                    )
-                                }
-
-                                if (playerState.status == PlaybackStatus.ERROR) {
-                                    Surface(
-                                        color = Color.Black.copy(alpha = 0.88f),
-                                        shape = RoundedCornerShape(8.dp),
-                                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFF5252)),
-                                        modifier = Modifier.padding(16.dp).align(Alignment.Center)
+                                activeVideoClips.forEach { videoClip ->
+                                    val layerScale = (viewModel.getInterpolatedValue(videoClip, KeyframeParam.SCALE) / 100f)
+                                        .coerceIn(0.2f, 3f)
+                                    val layerRotation = viewModel.getInterpolatedValue(videoClip, KeyframeParam.ROTATION)
+                                    val layerX = viewModel.getInterpolatedValue(videoClip, KeyframeParam.POSITION_X)
+                                    val layerY = viewModel.getInterpolatedValue(videoClip, KeyframeParam.POSITION_Y)
+                                    val layerOpacity = (viewModel.getInterpolatedValue(videoClip, KeyframeParam.OPACITY) / 100f)
+                                        .coerceIn(0f, 1f)
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .offset(x = layerX.dp, y = layerY.dp)
+                                            .scale(layerScale)
+                                            .rotate(layerRotation)
+                                            .graphicsLayer { alpha = layerOpacity }
                                     ) {
-                                        Column(
-                                            modifier = Modifier.padding(14.dp),
-                                            horizontalAlignment = Alignment.CenterHorizontally,
-                                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.WarningAmber,
-                                                contentDescription = null,
-                                                tint = Color(0xFFFF5252),
-                                                modifier = Modifier.size(28.dp)
+                                        val thumbPath = videoClip.thumbnailPath.ifEmpty { videoClip.filePath }
+                                        if (thumbPath.isNotEmpty()) {
+                                            AsyncImage(
+                                                model = thumbPath,
+                                                contentDescription = videoClip.name,
+                                                modifier = Modifier.fillMaxSize(),
+                                                contentScale = ContentScale.Crop
                                             )
-                                            Text(
-                                                text = "Video Oynatılamadı",
-                                                color = Color.White,
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 13.sp
-                                            )
-                                            Text(
-                                                text = playerState.errorMessage ?: "Desteklenmeyen video veya ses codec'i",
-                                                color = VexTextSecondary,
-                                                fontSize = 10.sp,
-                                                textAlign = TextAlign.Center
-                                            )
-                                            Button(
-                                                onClick = { viewModel.deleteClip(activeVisualClip.id) },
-                                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF5252)),
-                                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                                                shape = RoundedCornerShape(6.dp)
-                                            ) {
-                                                Text("Klibi Kaldır", fontSize = 11.sp, color = Color.White)
-                                            }
                                         }
+                                        AndroidView(
+                                            factory = { ctx ->
+                                                TextureView(ctx).apply {
+                                                    isOpaque = false
+                                                    var layerSurface: Surface? = null
+                                                    surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+                                                        override fun onSurfaceTextureAvailable(st: SurfaceTexture, w: Int, h: Int) {
+                                                            layerSurface?.release()
+                                                            layerSurface = Surface(st)
+                                                            viewModel.player.attachVideoLayerSurface(videoClip.id, layerSurface)
+                                                            viewModel.syncPlayerToPlayhead(viewModel.playheadPositionMs.value)
+                                                        }
+                                                        override fun onSurfaceTextureSizeChanged(st: SurfaceTexture, w: Int, h: Int) {}
+                                                        override fun onSurfaceTextureDestroyed(st: SurfaceTexture): Boolean {
+                                                            viewModel.player.attachVideoLayerSurface(videoClip.id, null)
+                                                            layerSurface?.release()
+                                                            layerSurface = null
+                                                            return true
+                                                        }
+                                                        override fun onSurfaceTextureUpdated(st: SurfaceTexture) {}
+                                                    }
+                                                }
+                                            },
+                                            modifier = Modifier.fillMaxSize()
+                                        )
                                     }
                                 }
                             }
