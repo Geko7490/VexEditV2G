@@ -36,6 +36,15 @@ data class AudioTrackPlayback(
     val uriString: String = ""
 )
 
+data class VideoLayerPlayback(
+    val clipId: String,
+    val filePath: String,
+    val startOffsetMs: Long,
+    val shouldPlay: Boolean,
+    val volume: Float = 1f,
+    val muted: Boolean = false
+)
+
 data class PlayerState(
     val status: PlaybackStatus = PlaybackStatus.IDLE,
     val filePath: String = "",
@@ -61,6 +70,10 @@ class StudioMediaPlayer(context: Context) {
     private var isMuted = false
     private var pendingSeekMs: Long = 0L
     private var isPrepared = false
+
+    private val layeredVideoPlayers = mutableMapOf<String, ExoPlayer>()
+    private val layeredVideoPaths = mutableMapOf<String, String>()
+    private val layeredVideoSurfaces = mutableMapOf<String, Surface>()
 
     private val audioPlayers = mutableMapOf<String, MediaPlayer>()
     private val audioPaths = mutableMapOf<String, String>()
@@ -180,12 +193,14 @@ class StudioMediaPlayer(context: Context) {
     fun play() {
         desiredPlaying = true
         if (isPrepared) videoPlayer.play()
+        layeredVideoPlayers.values.forEach { it.play() }
         audioPlayers.values.forEach { mp -> try { if (!mp.isPlaying) mp.start() } catch (_: Exception) {} }
     }
 
     fun pause() {
         desiredPlaying = false
         videoPlayer.pause()
+        layeredVideoPlayers.values.forEach { it.pause() }
         audioPlayers.values.forEach { mp -> try { if (mp.isPlaying) mp.pause() } catch (_: Exception) {} }
     }
 
@@ -218,6 +233,10 @@ class StudioMediaPlayer(context: Context) {
         } catch (e: Exception) {
             Log.w(TAG, "Video stop failed", e)
         }
+        layeredVideoPlayers.values.forEach { try { it.release() } catch (_: Exception) {} }
+        layeredVideoPlayers.clear()
+        layeredVideoPaths.clear()
+        layeredVideoSurfaces.clear()
         _playerState.value = PlayerState(PlaybackStatus.IDLE)
     }
 
@@ -237,6 +256,54 @@ class StudioMediaPlayer(context: Context) {
         } finally {
             try { retriever.release() } catch (_: Exception) {}
         }
+    }
+
+    /**
+     * Keeps one decoder per simultaneously visible video clip so the preview can
+     * composite overlapping video lanes. Calls are cheap when the source is unchanged;
+     * timeline ticks only correct meaningful seek drift.
+     */
+    fun bindVideoLayers(layers: List<VideoLayerPlayback>) {
+        val validLayers = layers.filter { it.filePath.isNotBlank() && File(it.filePath).isFile }
+        val activeIds = validLayers.map { it.clipId }.toSet()
+        (layeredVideoPlayers.keys - activeIds).forEach { id ->
+            try { layeredVideoPlayers.remove(id)?.release() } catch (_: Exception) {}
+            layeredVideoPaths.remove(id)
+        }
+
+        validLayers.forEach { layer ->
+            val existing = layeredVideoPlayers[layer.clipId]
+            val sameSource = existing != null && layeredVideoPaths[layer.clipId] == layer.filePath
+            if (sameSource) {
+                val player = existing!!
+                player.volume = if (layer.muted) 0f else layer.volume.coerceIn(0f, 1f)
+                val target = layer.startOffsetMs.coerceAtLeast(0L)
+                val drift = kotlin.math.abs(player.currentPosition - target)
+                if (drift > if (layer.shouldPlay) 650L else 120L) player.seekTo(target)
+                if (layer.shouldPlay) player.play() else player.pause()
+            } else {
+                try { existing?.release() } catch (_: Exception) {}
+                val player = ExoPlayer.Builder(appContext).build()
+                layeredVideoPlayers[layer.clipId] = player
+                layeredVideoPaths[layer.clipId] = layer.filePath
+                player.volume = if (layer.muted) 0f else layer.volume.coerceIn(0f, 1f)
+                layeredVideoSurfaces[layer.clipId]?.takeIf { it.isValid }?.let(player::setVideoSurface)
+                player.setMediaItem(MediaItem.fromUri(Uri.fromFile(File(layer.filePath))))
+                player.seekTo(layer.startOffsetMs.coerceAtLeast(0L))
+                player.prepare()
+                if (layer.shouldPlay) player.playWhenReady = true
+            }
+        }
+    }
+
+    fun attachVideoLayerSurface(clipId: String, newSurface: Surface?) {
+        if (newSurface == null || !newSurface.isValid) {
+            layeredVideoSurfaces.remove(clipId)
+            layeredVideoPlayers[clipId]?.clearVideoSurface()
+            return
+        }
+        layeredVideoSurfaces[clipId] = newSurface
+        layeredVideoPlayers[clipId]?.setVideoSurface(newSurface)
     }
 
     fun bindAudioTrack(
@@ -399,6 +466,10 @@ class StudioMediaPlayer(context: Context) {
 
     fun release() {
         stopAudio()
+        layeredVideoPlayers.values.forEach { try { it.release() } catch (_: Exception) {} }
+        layeredVideoPlayers.clear()
+        layeredVideoPaths.clear()
+        layeredVideoSurfaces.clear()
         try { videoPlayer.release() } catch (_: Exception) {}
     }
 }
